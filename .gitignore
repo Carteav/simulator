@@ -47,3 +47,11 @@
 /svlsimulator-check*.html
 /svlsimulator-bundles*.html
 /svlsimulator-*.zip
+
+.idea/.idea.simulator/.idea/indexLayout.xml
+
+.idea/.idea.simulator/.idea/projectSettingsUpdater.xml
+
+.idea/.idea.simulator/.idea/vcs.xml
+
+.idea/.idea.simulator/.idea/workspace.xml

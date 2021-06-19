@@ -205,6 +205,7 @@ namespace Simulator.Bridge.Ros2
                     stamp = Convert(data.Time),
                     frame_id = data.Frame,
                 },
+                objects = new List<Lgsvl.DetectedRadarObject>() // Is needed? Carteav
             };
 
             foreach (var obj in data.Data)
