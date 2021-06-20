@@ -226,6 +226,7 @@ namespace Simulator.Web
             }
             else if (ConnectionManager.Status == ConnectionManager.ConnectionStatus.Online)
             {
+                string localurl = "localhost:8080";
                 Application.OpenURL(Simulator.Web.Config.CloudUrl);
             }
         }
