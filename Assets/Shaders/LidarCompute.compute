@@ -36,12 +36,23 @@ CBUFFER_START(cb0)
     float4 _DirLidarDeltaX;
     float4 _DirLidarDeltaY;
 
+    // Custom Properties:
+    int _CustomPoints;
+    int _CustomSectors;
+    
+
 CBUFFER_END
 
 TEXTURE2D_X(_Input);
 RWStructuredBuffer<float4> _Output;
 StructuredBuffer<float> _SinLatitudeAngles;
 StructuredBuffer<float> _CosLatitudeAngles;
+
+// Custom Buffers:
+StructuredBuffer<int> _CustomSize;
+StructuredBuffer<int> _CustomIndex;
+StructuredBuffer<float> _CustomYaw;
+StructuredBuffer<float> _CustomPitch;
 
 float DecodeFloatRGB(float3 rgb)
 {

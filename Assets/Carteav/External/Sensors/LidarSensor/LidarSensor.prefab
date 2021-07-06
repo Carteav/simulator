@@ -188,7 +188,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2793506440945998060}
-  - component: {fileID: -6915071163242918046}
+  - component: {fileID: 5493587851133273981}
   m_Layer: 0
   m_Name: LidarSensor
   m_TagString: Untagged
@@ -211,7 +211,7 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &-6915071163242918046
+--- !u!114 &5493587851133273981
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -220,10 +220,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 8814546918320267595}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9f4fdfeb5fce591caa0d034f8615a6b2, type: 3}
+  m_Script: {fileID: 11500000, guid: 63c3a74b174dee269a572230089118fb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: 
+  Name: LidarSensor
   Topic: 
   Frame: 
   ParentTransform: {fileID: 0}
@@ -233,9 +233,9 @@ MonoBehaviour:
   FieldOfView: 40
   CenterAngle: 5
   MinDistance: 0.5
-  MaxDistance: 300
+  MaxDistance: 100
   RotationFrequency: 10
-  MeasurementsPerRotation: 3272
+  MeasurementsPerRotation: 360
   Compensated: 1
   Top: {fileID: 0}
   PointSize: 2
