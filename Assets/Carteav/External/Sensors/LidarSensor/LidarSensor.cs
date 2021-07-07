@@ -23,11 +23,12 @@ namespace Simulator.Sensors
   [SensorType("Lidar", new[] {typeof (PointCloudData)})]
   public class LidarSensor : LidarSensorBase
   {
+    public bool Custom;
     /* Custom Properties */
     public static int CustomPoints = 500000;
     public static int CustomSectors = 24;
-    public static float[,] CustomYaw = new float[CustomSectors,CustomPoints]; 
-    public static float[,] CustomPitch = new float[CustomSectors,CustomPoints]; 
+    public static float[,] CustomYaw = new float[CustomSectors, CustomPoints]; 
+    public static float[,] CustomPitch = new float[CustomSectors , CustomPoints]; 
     public static int[] CustomSize = new int[CustomSectors];
     public static int[] CustomIndex = new int[CustomSectors];
     protected ComputeBuffer CustomSizeBuffer;
@@ -159,7 +160,10 @@ namespace Simulator.Sensors
 
     protected override void EndReadRequest(CommandBuffer cmd, ReadRequest req)
     {
-      int kernel = cs.FindKernel(Compensated != null ? "LidarComputeComp" : "LidarCompute");
+      string kernelName = Custom ? Compensated != null ? "LidarCustomComputeComp" : "LidarCustomCompute" :
+        Compensated != null ? "LidarComputeComp" : "LidarCompute";
+
+      int kernel = cs.FindKernel(kernelName);
       cmd.SetComputeTextureParam(cs, kernel, Properties.Input, req.TextureSet.ColorTexture);
       cmd.SetComputeBufferParam(cs, kernel, Properties.Output, PointCloudBuffer);
       cmd.SetComputeBufferParam(cs, kernel, Properties.SinLatitudeAngles, SinLatitudeAnglesBuffer);
@@ -175,16 +179,14 @@ namespace Simulator.Sensors
       cmd.SetComputeVectorParam(cs, Properties.TexSize, new Vector4(RenderTextureWidth, RenderTextureHeight, 1f / RenderTextureWidth, 1f / RenderTextureHeight));
       cmd.SetComputeVectorParam(cs, Properties.LongitudeAngles, new Vector4(SinStartLongitudeAngle, CosStartLongitudeAngle, DeltaLongitudeAngle, 0.0f));
       
-      // Set Custom Properties //
-      cmd.SetComputeIntParam(cs, Properties.PointsCustom, CustomPoints);
-      cmd.SetComputeIntParam(cs, Properties.SectorsCustom, CustomSectors);
-      cmd.SetComputeBufferParam(cs, kernel, Properties.SizeCustom, CustomSizeBuffer);
-      cmd.SetComputeBufferParam(cs, kernel, Properties.IndexCustom, CustomIndexBuffer);
-      cmd.SetComputeBufferParam(cs, kernel, Properties.PitchCustom, CustomPitchBuffer);
-      cmd.SetComputeBufferParam(cs, kernel, Properties.YawCustom, CustomYawBuffer);
-      //
-      
-      cmd.DispatchCompute(cs, kernel, HDRPUtilities.GetGroupSize(req.Count, 8), HDRPUtilities.GetGroupSize(LaserCount, 8), 1);
+      if (Custom)
+      {
+        CustomDispatch(cmd, req, kernel);
+      }
+      else
+      {
+        cmd.DispatchCompute(cs, kernel, HDRPUtilities.GetGroupSize(req.Count, 8), HDRPUtilities.GetGroupSize(LaserCount, 8), 1);
+      }
     }
 
     protected override void SendMessage()
@@ -366,12 +368,37 @@ namespace Simulator.Sensors
       // Custom Shader properties:
       public static readonly int PointsCustom = Shader.PropertyToID("_CustomPoints");
       public static readonly int SectorsCustom = Shader.PropertyToID("_CustomSectors");
+      public static readonly int IdxCustom = Shader.PropertyToID("_CustomIdx");
       public static readonly int SizeCustom = Shader.PropertyToID("_CustomSize");
       public static readonly int IndexCustom = Shader.PropertyToID("_CustomIndex");
       public static readonly int YawCustom = Shader.PropertyToID("_CustomYaw");
       public static readonly int PitchCustom = Shader.PropertyToID("_CustomPitch");
     }
 
+
+    private void CustomDispatch(CommandBuffer cmd, ReadRequest req, int kernel)
+    {
+      int idx = req.Index / 15;
+      
+      // Set Custom Properties //
+      cmd.SetComputeIntParam(cs, Properties.IdxCustom, idx);
+      cmd.SetComputeIntParam(cs, Properties.PointsCustom, CustomPoints);
+      cmd.SetComputeIntParam(cs, Properties.SectorsCustom, CustomSectors);
+      cmd.SetComputeBufferParam(cs, kernel, Properties.SizeCustom, CustomSizeBuffer);
+      cmd.SetComputeBufferParam(cs, kernel, Properties.IndexCustom, CustomIndexBuffer);
+      cmd.SetComputeBufferParam(cs, kernel, Properties.PitchCustom, CustomPitchBuffer);
+      cmd.SetComputeBufferParam(cs, kernel, Properties.YawCustom, CustomYawBuffer);
+      //
+      
+      int yDimension = CustomSize[idx];
+      //Debug.Log($"HDRPUtilities.GetGroupSize(yDimension, 1): {HDRPUtilities.GetGroupSize(yDimension, 1)}\nyDimension:{yDimension}\nIdx: {idx}");
+      if (yDimension > 0)
+      {
+        cmd.DispatchCompute(cs, kernel, 1, yDimension, 1);
+      }
+    }
+    
+    
     private void CustomReset()
     {
       // Set Shader Data
@@ -381,6 +408,7 @@ namespace Simulator.Sensors
       CustomPitchBuffer = new ComputeBuffer(CustomSectors * CustomPoints, 4);
       CustomSizeBuffer.SetData(CustomSize);
       CustomIndexBuffer.SetData(CustomIndex);
+      
       CustomYawBuffer.SetData(CustomYaw);
       CustomPitchBuffer.SetData(CustomPitch);
       
@@ -392,7 +420,6 @@ namespace Simulator.Sensors
         // Will not overwrite if the destination file already exists.
         System.IO.File.Copy(path + "/rs_m1.csv", path + "/../simulator_Data/rs_m1.csv", true);
       }
-
       // Catch exception if the file was already copied.
       catch (IOException copyError)
       {
@@ -440,13 +467,13 @@ namespace Simulator.Sensors
       {
         for(int j=0;j<lines_[i];j++)
         {			    
-          yaw_[i,j] = p1_[i][j];
-          pitch_[i,j] = p2_[i][j];
+          yaw_[i , j] = p1_[i][j];
+          pitch_[i , j] = p2_[i][j];
         }
         size_[i] = lines_[i];
         Index_[i] = sum;
         sum += size_[i];
-        //print("i= " + i + " " + size_[i] + " " + Index_[i]);
+        print("i= " + i + " " + size_[i] + " " + Index_[i]);
         //yaw = p1.ToArray();
         //pitch = p2.ToArray();
         //size = lines;

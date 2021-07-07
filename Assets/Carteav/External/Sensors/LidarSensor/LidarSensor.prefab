@@ -240,3 +240,4 @@ MonoBehaviour:
   Top: {fileID: 0}
   PointSize: 2
   PointColor: {r: 1, g: 0, b: 0, a: 1}
+  Custom: 1
