@@ -188,9 +188,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2793506440945998060}
-  - component: {fileID: 6745329909020354373}
+  - component: {fileID: -5025747640346234577}
   m_Layer: 0
-  m_Name: LidarSensor
+  m_Name: CustomLidarSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -211,7 +211,7 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6745329909020354373
+--- !u!114 &-5025747640346234577
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -220,17 +220,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 8814546918320267595}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a7e569f8c72271dd483a0457f4a43782, type: 3}
+  m_Script: {fileID: 11500000, guid: 18fbc234c302fc05ab61fbe71fa46ed0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: 
-  Topic: /lidar/raw
-  Frame: lidar
+  Name: CustomLidarSensor
+  Topic: 
+  Frame: 
   ParentTransform: {fileID: 0}
   TemplateIndex: 0
   VerticalRayAngles: []
-  LaserCount: 32
-  FieldOfView: 41.33
+  LaserCount: 128
+  FieldOfView: 40
   CenterAngle: 10
   MinDistance: 0.5
   MaxDistance: 100
@@ -241,3 +241,5 @@ MonoBehaviour:
   PointSize: 2
   PointColor: {r: 1, g: 0, b: 0, a: 1}
   Custom: 1
+  CustomLidarComputeShader: {fileID: 7200000, guid: 912a3342cb34c05d0abed1c376d61c6e,
+    type: 3}

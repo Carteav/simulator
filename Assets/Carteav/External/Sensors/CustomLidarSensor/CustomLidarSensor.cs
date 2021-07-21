@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -21,20 +22,25 @@ using Object = UnityEngine.Object;
 namespace Simulator.Sensors
 {
   [SensorType("Lidar", new[] {typeof (PointCloudData)})]
-  public class LidarSensor : LidarSensorBase
+  public class CustomLidarSensor : LidarSensorBase
   {
-    public bool Custom;
     /* Custom Properties */
-    public static int CustomPoints = 500000;
-    public static int CustomSectors = 24;
-    public static float[,] CustomYaw = new float[CustomSectors, CustomPoints]; 
-    public static float[,] CustomPitch = new float[CustomSectors , CustomPoints]; 
-    public static int[] CustomSize = new int[CustomSectors];
-    public static int[] CustomIndex = new int[CustomSectors];
-    protected ComputeBuffer CustomSizeBuffer;
-    protected ComputeBuffer CustomIndexBuffer;
-    protected ComputeBuffer CustomYawBuffer;
-    protected ComputeBuffer CustomPitchBuffer;
+    public bool Custom;
+    [SerializeField]
+    private ComputeShader CustomLidarComputeShader;
+    private static int CustomPoints = 500000;
+    private static int CustomSectors = 24;
+    private static float[,] CustomYaw = new float[CustomSectors, CustomPoints]; 
+    private static float[,] CustomPitch = new float[CustomSectors , CustomPoints]; 
+    private static int[] CustomSize = new int[CustomSectors];
+    private static int[] CustomIndex = new int[CustomSectors];
+    private ComputeBuffer CustomSizeBuffer;
+    private ComputeBuffer CustomIndexBuffer;
+    private ComputeBuffer CustomYawBuffer;
+    private ComputeBuffer CustomPitchBuffer;
+    private bool lastFrameCustom;
+    //
+    
     
     public void ApplyTemplate()
     {
@@ -154,12 +160,15 @@ namespace Simulator.Sensors
       SensorCamera.farClipPlane = MaxDistance;
       SensorCamera.projectionMatrix = matrix4x4;
 
-
-      CustomReset();
+      if (Custom)
+      {
+        CustomReset();
+      }
     }
 
     protected override void EndReadRequest(CommandBuffer cmd, ReadRequest req)
     {
+      //UnityEngine.Debug.DebugBreak();
       string kernelName = Custom ? Compensated != null ? "LidarCustomComputeComp" : "LidarCustomCompute" :
         Compensated != null ? "LidarComputeComp" : "LidarCompute";
 
@@ -238,7 +247,16 @@ namespace Simulator.Sensors
       public float CenterAngle;
       public static readonly Template[] Templates = new Template[7]
       {
-        new Template { Name = "Custom" },
+        new Template { Name = "Custom",
+          LaserCount = 32,
+          MinDistance = 0.5f,
+          MaxDistance = 100f,
+          RotationFrequency = 10f,
+          MeasurementsPerRotation = 360,
+          FieldOfView = 41.33f,
+          VerticalRayAngles = new List<float>(),
+          CenterAngle = 10f 
+        },
         new Template
         {
           Name = "Lidar16",
@@ -376,6 +394,33 @@ namespace Simulator.Sensors
     }
 
 
+    public override void Update()
+    {
+      if (lastFrameCustom != Custom)
+      {
+        lastFrameCustom = Custom;
+        Reset();
+        if (!Custom)
+        {
+          CustomReset();
+        }
+        else
+        {
+          //CurrentIndex = 0;
+        }
+      }
+      base.Update();
+    }
+
+    public override void Init()
+    {
+      transform.localPosition = new Vector3(0.6f, 1.46f, 3f);
+      transform.localRotation = Quaternion.identity;
+      
+      RuntimeSettings.Instance.LidarComputeShader = CustomLidarComputeShader;
+      base.Init();
+    }
+
     private void CustomDispatch(CommandBuffer cmd, ReadRequest req, int kernel)
     {
       int idx = req.Index / 15;
@@ -401,6 +446,28 @@ namespace Simulator.Sensors
     
     private void CustomReset()
     {
+      if (CustomSizeBuffer != null)
+      {
+        CustomSizeBuffer.Release();
+        CustomSizeBuffer = null;
+      }
+      if (CustomIndexBuffer != null)
+      {
+        CustomIndexBuffer.Release();
+        CustomIndexBuffer = null;
+      }
+      if (CustomYawBuffer != null)
+      {
+        CustomYawBuffer.Release();
+        CustomYawBuffer = null;
+      }
+      if (CustomPitchBuffer != null)
+      {
+        CustomPitchBuffer.Release();
+        CustomPitchBuffer = null;
+      }
+      
+      
       // Set Shader Data
       CustomSizeBuffer = new ComputeBuffer(CustomSectors, 4);
       CustomIndexBuffer = new ComputeBuffer(CustomSectors, 4);
@@ -408,7 +475,6 @@ namespace Simulator.Sensors
       CustomPitchBuffer = new ComputeBuffer(CustomSectors * CustomPoints, 4);
       CustomSizeBuffer.SetData(CustomSize);
       CustomIndexBuffer.SetData(CustomIndex);
-      
       CustomYawBuffer.SetData(CustomYaw);
       CustomPitchBuffer.SetData(CustomPitch);
       
