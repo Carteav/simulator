@@ -190,7 +190,7 @@ GameObject:
   - component: {fileID: 2793506440945998060}
   - component: {fileID: -4532058702488435227}
   m_Layer: 0
-  m_Name: CustomLidarSensor
+  m_Name: CarteavLidarSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -223,9 +223,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0ce32127906323266bf76535ffea2bac, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: CustomLidar
-  Topic: 
-  Frame: 
+  Name: Carteav Lidar Sensor
+  Topic: /lidar
+  Frame: frame
   ParentTransform: {fileID: 0}
   TemplateIndex: 0
   VerticalRayAngles: []
@@ -240,6 +240,6 @@ MonoBehaviour:
   Top: {fileID: 0}
   PointSize: 2
   PointColor: {r: 1, g: 0, b: 0, a: 1}
-  Custom: 1
+  Custom: 0
   CustomLidarComputeShader: {fileID: 7200000, guid: 2a61b1f6dbed5ce39a85093b5ce8b05c,
     type: 3}

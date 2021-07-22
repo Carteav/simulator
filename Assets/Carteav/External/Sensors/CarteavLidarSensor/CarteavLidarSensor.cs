@@ -22,7 +22,7 @@ using Object = UnityEngine.Object;
 namespace Simulator.Sensors
 {
   [SensorType("Lidar", new[] {typeof (PointCloudData)})]
-  public class CustomLidarSensor : LidarSensorBase
+  public class CarteavLidarSensor : LidarSensorBase
   {
     /* Custom Properties */
     public bool Custom;
@@ -406,7 +406,7 @@ namespace Simulator.Sensors
         }
         else
         {
-          //CurrentIndex = 0;
+          CurrentIndex = 0;
         }
       }
       base.Update();
