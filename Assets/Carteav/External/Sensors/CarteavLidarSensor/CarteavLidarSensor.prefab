@@ -240,6 +240,6 @@ MonoBehaviour:
   Top: {fileID: 0}
   PointSize: 2
   PointColor: {r: 1, g: 0, b: 0, a: 1}
-  Custom: 0
+  Custom: 1
   CustomLidarComputeShader: {fileID: 7200000, guid: 2a61b1f6dbed5ce39a85093b5ce8b05c,
     type: 3}
