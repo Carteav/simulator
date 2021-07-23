@@ -142,7 +142,7 @@ namespace Simulator.Sensors
         protected Stack<SensorRenderTarget> AvailableRenderTextures = new Stack<SensorRenderTarget>();
         protected Stack<Texture2D> AvailableTextures = new Stack<Texture2D>();
 
-        protected int CurrentIndex;
+        int CurrentIndex;
         protected float AngleStart;
         float AngleDelta;
 

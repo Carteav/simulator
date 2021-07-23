@@ -17,6 +17,7 @@ using Simulator.Utilities;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Rendering;
+using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 
 namespace Simulator.Sensors
@@ -39,6 +40,8 @@ namespace Simulator.Sensors
     private ComputeBuffer CustomYawBuffer;
     private ComputeBuffer CustomPitchBuffer;
     private bool lastFrameCustom;
+    private bool indexReset = false;
+    private int currentIndexOffset = 0;
     //
     
     
@@ -402,12 +405,9 @@ namespace Simulator.Sensors
         Reset();
         if (!Custom)
         {
-          CustomReset();
+          ReleaseCustomBuffers();
         }
-        else
-        {
-          CurrentIndex = 0;
-        }
+        
       }
       base.Update();
     }
@@ -423,7 +423,13 @@ namespace Simulator.Sensors
 
     private void CustomDispatch(CommandBuffer cmd, ReadRequest req, int kernel)
     {
-      int idx = req.Index / 15;
+      if (indexReset)
+      {
+        currentIndexOffset = -req.Index / 15;
+        indexReset = false;
+        Debug.Log($"reset index {currentIndexOffset}");
+      }
+      int idx = (currentIndexOffset + req.Index / 15 + 24) % 24;
       
       // Set Custom Properties //
       cmd.SetComputeIntParam(cs, Properties.IdxCustom, idx);
@@ -446,27 +452,9 @@ namespace Simulator.Sensors
     
     private void CustomReset()
     {
-      if (CustomSizeBuffer != null)
-      {
-        CustomSizeBuffer.Release();
-        CustomSizeBuffer = null;
-      }
-      if (CustomIndexBuffer != null)
-      {
-        CustomIndexBuffer.Release();
-        CustomIndexBuffer = null;
-      }
-      if (CustomYawBuffer != null)
-      {
-        CustomYawBuffer.Release();
-        CustomYawBuffer = null;
-      }
-      if (CustomPitchBuffer != null)
-      {
-        CustomPitchBuffer.Release();
-        CustomPitchBuffer = null;
-      }
-      
+      indexReset = true;
+
+      ReleaseCustomBuffers();
       
       // Set Shader Data
       CustomSizeBuffer = new ComputeBuffer(CustomSectors, 4);
@@ -495,6 +483,31 @@ namespace Simulator.Sensors
       //Read LIDAR angles file
       getTwoArraysFromFile_(path + "/rs_m1.csv", ref CustomYaw, ref CustomPitch, ref CustomSize, ref CustomIndex);
     }
+
+    private void ReleaseCustomBuffers()
+    {
+      if (CustomSizeBuffer != null)
+      {
+        CustomSizeBuffer.Release();
+        CustomSizeBuffer = null;
+      }
+      if (CustomIndexBuffer != null)
+      {
+        CustomIndexBuffer.Release();
+        CustomIndexBuffer = null;
+      }
+      if (CustomYawBuffer != null)
+      {
+        CustomYawBuffer.Release();
+        CustomYawBuffer = null;
+      }
+      if (CustomPitchBuffer != null)
+      {
+        CustomPitchBuffer.Release();
+        CustomPitchBuffer = null;
+      }
+    }
+    
     
     public static void getTwoArraysFromFile_(string filein, ref float[,] yaw_, ref float[,] pitch_, ref int[] size_, ref int[] Index_)
     {
