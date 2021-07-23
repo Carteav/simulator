@@ -2,7 +2,8 @@
     "name": "ExternalAssembly",
     "references": [
         "GUID:8c14360cd7563c841b92a26bfe7df07f",
-        "GUID:43bb230cc5d89654fb9c4da20660d5b4"
+        "GUID:43bb230cc5d89654fb9c4da20660d5b4",
+        "GUID:fb254b4137a280342aa5b17695020ac0"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

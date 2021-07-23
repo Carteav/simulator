@@ -348,6 +348,33 @@ namespace Simulator.Bridge.Ros2
             };
         }
 
+        public static DetectedRadarObjectData ConvertTo(Lgsvl.DetectedRadarObjectArray data)
+        {
+            var r = new DetectedRadarObjectData()
+            {
+                Data = data.objects.ConvertAll(obj => new DetectedRadarObject()
+                {
+                    SensorAim = ConvertFromVector(obj.sensor_aim),
+                    SensorRight = ConvertFromVector(obj.sensor_right),
+                    SensorPosition  = ConvertFromPoint(obj.sensor_position),
+                    SensorVelocity = ConvertFromVector(obj.sensor_velocity),
+                    SensorAngle = obj.sensor_angle,
+                    Position = ConvertFromPoint(obj.object_position),
+                    Velocity = ConvertFromVector(obj.object_velocity),
+                    RelativePosition = ConvertFromPoint(obj.object_relative_position),
+                    RelativeVelocity = ConvertFromVector(obj.object_relative_velocity),
+                    ColliderSize = ConvertFromVector(obj.object_collider_size),
+                    State = obj.object_state,
+                    NewDetection = obj.new_detection
+                    
+                }).ToArray(), 
+                Frame = data.header.frame_id, 
+                Time = Convert(data.header.stamp)
+                
+            };
+            return r;
+        }
+        
         public static Detected3DObjectArray ConvertTo(Lgsvl.Detection3DArray data)
         {
             return new Detected3DObjectArray()
@@ -444,6 +471,12 @@ namespace Simulator.Bridge.Ros2
             };
         }
 
+        static  UnityEngine.Vector3 ConvertFromPoint(Ros.Point  v)
+        {
+            return new UnityEngine.Vector3 () { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+        }
+        
+        
         static Ros.Point ConvertToPoint(UnityEngine.Vector3 v)
         {
             return new Ros.Point() { x = v.x, y = v.y, z = v.z };
@@ -454,6 +487,11 @@ namespace Simulator.Bridge.Ros2
             return new Ros.Point() { x = d.x, y = d.y, z = d.z };
         }
 
+        static UnityEngine .Vector3 ConvertFromVector(Ros.Vector3 v)
+        {
+            return new UnityEngine.Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+        }
+        
         static Ros.Vector3 ConvertToVector(UnityEngine.Vector3 v)
         {
             return new Ros.Vector3() { x = v.x, y = v.y, z = v.z };

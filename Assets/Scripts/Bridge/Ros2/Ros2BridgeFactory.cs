@@ -45,6 +45,7 @@ namespace Simulator.Bridge.Ros2
             
             //Carteav
             RegPublisher<DetectedRadarObjectData, Lgsvl.DetectedRadarObjectArray>(plugin, Ros2Conversions.ConvertFrom);
+            RegSubscriber<DetectedRadarObjectData, Lgsvl.DetectedRadarObjectArray>(plugin, Ros2Conversions.ConvertTo);
             //
             
             
