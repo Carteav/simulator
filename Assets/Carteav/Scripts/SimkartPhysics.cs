@@ -2,75 +2,76 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SimkartPhysics : MonoBehaviour
+public class SimkartPhysics : MonoBehaviour, IVehicleInputs
 {
-    public float wheelBase;
-    Vector3 pos;
-    Quaternion Myrotation;
+    public Rigidbody Rigidbody;
 
+    public float SteerInput { get; private set; }
+    public float AccelInput { get; private set; }
+    public float BrakeInput { get; private set; }
+    
+    private bool testing = false;
 
-    public float accelerationInput;
-    public float SteerInput;
-    public bool reverse;
-    float currentVelocitcy;
-    float currentOri;
-    Vector3 angles;
-
- //   public Transform originTrans;
+    private float testTime = 0;
 
     void Start()
     {
-        pos = transform.position;
-        Myrotation = transform.rotation;
-   ////     originTrans.position = transform.position;
-        angles = Myrotation.eulerAngles;
+        Rigidbody = GetComponentInChildren<Rigidbody>();
     }
+
 
     void Update()
     {
-        if(Input.GetKey("taA                                                                                                                                                                                                                                                                                                                                                                                                                                                                "))
+        if(Input.GetKey(KeyCode.UpArrow))
         {
-            accelerationInput+=0.1f;
+            AccelInput+=0.1f;
         }
 
-        if(Input.GetKey("f"))
+        if(Input.GetKey(KeyCode.DownArrow))
         {
-            accelerationInput-=0.1f;
+            AccelInput-=0.1f;
         }
 
-        if(Input.GetKey("d"))
+        if(Input.GetKey(KeyCode.LeftArrow))
         {
-            SteerInput+=0.1f;
+            SteerInput+=0.01f;
         }
 
-        if(Input.GetKey("a"))
+        if(Input.GetKey(KeyCode.RightArrow))
         {
-            SteerInput-=0.1f;
+            SteerInput-=0.01f;
         }
 
+        if (Input.GetKeyDown(KeyCode.T))
+        {
+            if (!testing)
+            {
+                testing = true;
+                testTime = Time.time;
+                transform.position = transform.position - new Vector3(0, 0, 100);
+                Debug.Log($"Starting position: {transform.position}, starting velocity: {Rigidbody.velocity}");
+                Rigidbody.velocity = 10 * transform.forward;
+                Debug.Log($"Velocity set to: {Rigidbody.velocity}, time: {Time.time}");
+            }
+        }
     }
 
     void FixedUpdate()
     {
-        ApplySteer();
-        ApplyAcceleration();
+        if (testing)
+        {
+            Rigidbody.velocity = 10 * transform.forward;
+            if (Time.time - testTime > 5 && Time.time - testTime < 5.5)
+            {
+                Debug.Log($"Middle position: {transform.position}, middle velocity: {Rigidbody.velocity}, time: {Time.time}");
+            }
+
+            if (Time.time - testTime >= 10)
+            {
+                Rigidbody.velocity = Vector3.zero;
+                Debug.Log($"End position: {transform.position}, end velocity: {Rigidbody.velocity}, time: {Time.time}");
+                testing = false;
+            }
+        }
     }
-
-    void ApplySteer()
-    {
-        angles.y += currentVelocitcy * Mathf.Tan(SteerInput) / wheelBase * Time.deltaTime;
-
-        pos.x += currentVelocitcy * Mathf.Cos(angles.y) * Time.deltaTime;
-        pos.z += currentVelocitcy * Mathf.Sin(angles.y) * Time.deltaTime;
-        transform.position = pos;
-
-
-        transform.rotation = Quaternion.AngleAxis((-180*angles.y)/3.14159f, Vector3.up); 
-    }
-
-    void ApplyAcceleration()
-    {
-           currentVelocitcy += accelerationInput* Time.deltaTime;
-    }
-
 }
