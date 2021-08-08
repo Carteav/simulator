@@ -23,15 +23,27 @@ using Object = UnityEngine.Object;
 
 namespace Simulator.Sensors
 {
+    /// <summary>
+    /// CarteavLidarSensor is a custom lidar sensor.
+    /// Instance fields are named with a "custom" prefix to differentiate from default implementation variables.
+    /// </summary>
     [SensorType("Lidar", new[] { typeof(PointCloudData) })]
     public class CarteavLidarSensor : LidarSensorBase
     {
         /* Custom Properties */
-        struct PassData
+        class PassData
         {
             public List<List<float>> P1;
             public List<List<float>> P2;
             public int[] Lines;
+            public float[,] CustomYaw;
+            public float[,] CustomPitch;
+            public int[] CustomSize;
+            public int[] CustomIndex;
+            public ComputeBuffer CustomSizeBuffer;
+            public ComputeBuffer CustomIndexBuffer;
+            public ComputeBuffer CustomYawBuffer;
+            public ComputeBuffer CustomPitchBuffer;
         }
 
 
@@ -48,18 +60,11 @@ namespace Simulator.Sensors
 
         private Dictionary<int, PassData> filePassData =
             new Dictionary<int, PassData>();
-        
-        
+
+
         private int customPoints = 500000;
         private int customSectors = 24;
-        private float[,] customYaw;
-        private float[,] customPitch;
-        private int[] customSize;
-        private int[] customIndex;
-        private ComputeBuffer customSizeBuffer;
-        private ComputeBuffer customIndexBuffer;
-        private ComputeBuffer customYawBuffer;
-        private ComputeBuffer customPitchBuffer;
+
         private bool lastFrameCustom;
         private bool indexReset = false;
 
@@ -206,6 +211,7 @@ namespace Simulator.Sensors
         protected override void EndReadRequest(CommandBuffer cmd, ReadRequest req)
         {
             //UnityEngine.Debug.DebugBreak();
+            EndReadMarker.Begin();
             string kernelName = Custom ? Compensated != null ? "LidarCustomComputeComp" : "LidarCustomCompute" :
                 Compensated != null ? "LidarComputeComp" : "LidarCompute";
 
@@ -238,6 +244,8 @@ namespace Simulator.Sensors
                 cmd.DispatchCompute(cs, kernel, HDRPUtilities.GetGroupSize(req.Count, 8),
                     HDRPUtilities.GetGroupSize(LaserCount, 8), 1);
             }
+            
+            EndReadMarker.End();
         }
 
         protected override void SendMessage()
@@ -450,7 +458,7 @@ namespace Simulator.Sensors
                 Reset();
                 if (!Custom)
                 {
-                    ReleaseCustomBuffers();
+                    //ReleaseCustomBuffers(filePassData[passIndex]);
                 }
             }
 
@@ -464,10 +472,7 @@ namespace Simulator.Sensors
 
             RuntimeSettings.Instance.LidarComputeShader = customLidarComputeShader;
 
-            customYaw = new float[customSectors, customPoints];
-            customPitch = new float[customSectors, customPoints];
-            customSize = new int[customSectors];
-            customIndex = new int[customSectors];
+
             timeSincePass = Time.time;
             LoadFileAngleData();
 
@@ -485,31 +490,29 @@ namespace Simulator.Sensors
 
             int idx = (currentIndexOffset + req.Index / 15 + customSectors) % customSectors;
 
-            if (Time.time - timeSincePass > timePerPass && anglePassAmount > 1 && idx + 1 == customSectors)
+            if (anglePassAmount > 1 && idx  == 0)//Time.time - timeSincePass > timePerPass && 
             {
                 timeSincePass = Time.time;
                 passIndex = (passIndex + 1) % anglePassAmount;
-                CustomReset();
+                //CustomReset();
             }
-            
+
             // Set Custom Properties //
             cmd.SetComputeIntParam(cs, Properties.IdxCustom, idx);
             cmd.SetComputeIntParam(cs, Properties.PointsCustom, customPoints);
             cmd.SetComputeIntParam(cs, Properties.SectorsCustom, customSectors);
-            cmd.SetComputeBufferParam(cs, kernel, Properties.SizeCustom, customSizeBuffer);
-            cmd.SetComputeBufferParam(cs, kernel, Properties.IndexCustom, customIndexBuffer);
-            cmd.SetComputeBufferParam(cs, kernel, Properties.PitchCustom, customPitchBuffer);
-            cmd.SetComputeBufferParam(cs, kernel, Properties.YawCustom, customYawBuffer);
+            cmd.SetComputeBufferParam(cs, kernel, Properties.SizeCustom, filePassData[passIndex].CustomSizeBuffer);
+            cmd.SetComputeBufferParam(cs, kernel, Properties.IndexCustom, filePassData[passIndex].CustomIndexBuffer);
+            cmd.SetComputeBufferParam(cs, kernel, Properties.PitchCustom, filePassData[passIndex].CustomPitchBuffer);
+            cmd.SetComputeBufferParam(cs, kernel, Properties.YawCustom, filePassData[passIndex].CustomYawBuffer);
             //
 
-            int yDimension = customSize[idx];
+            int yDimension = filePassData[passIndex].CustomSize[idx];
             //Debug.Log($"HDRPUtilities.GetGroupSize(yDimension, 1): {HDRPUtilities.GetGroupSize(yDimension, 1)}\nyDimension:{yDimension}\nIdx: {idx}");
             if (yDimension > 0)
             {
                 cmd.DispatchCompute(cs, kernel, 1, yDimension, 1);
             }
-            
-            
         }
 
 
@@ -517,21 +520,10 @@ namespace Simulator.Sensors
         {
             indexReset = true;
 
-            ReleaseCustomBuffers();
+            //ReleaseCustomBuffers(filePassData[passIndex]);
 
             // Set Shader Data
-            customSizeBuffer = new ComputeBuffer(customSectors, 4);
-            customIndexBuffer = new ComputeBuffer(customSectors, 4);
-            customYawBuffer = new ComputeBuffer(customSectors * customPoints, 4);
-            customPitchBuffer = new ComputeBuffer(customSectors * customPoints, 4);
-            customSizeBuffer.SetData(customSize);
-            customIndexBuffer.SetData(customIndex);
-            customYawBuffer.SetData(customYaw);
-            customPitchBuffer.SetData(customPitch);
-
-
-            ExtractAngles(ref customYaw, ref customPitch, ref customSize,
-                ref customIndex, filePassData[passIndex]);
+          
         }
 
         private void LoadFileAngleData()
@@ -553,30 +545,30 @@ namespace Simulator.Sensors
             GetTwoArraysFromFile(path + $"/Carteav/{anglesFile}");
         }
 
-        private void ReleaseCustomBuffers()
+        private void ReleaseCustomBuffers(PassData passData)
         {
-            if (customSizeBuffer != null)
+            if (passData.CustomSizeBuffer != null)
             {
-                customSizeBuffer.Release();
-                customSizeBuffer = null;
+                passData.CustomSizeBuffer.Release();
+                passData.CustomSizeBuffer = null;
             }
 
-            if (customIndexBuffer != null)
+            if (passData.CustomIndexBuffer != null)
             {
-                customIndexBuffer.Release();
-                customIndexBuffer = null;
+                passData.CustomIndexBuffer.Release();
+                passData.CustomIndexBuffer = null;
             }
 
-            if (customYawBuffer != null)
+            if (passData.CustomYawBuffer != null)
             {
-                customYawBuffer.Release();
-                customYawBuffer = null;
+                passData.CustomYawBuffer.Release();
+                passData.CustomYawBuffer = null;
             }
 
-            if (customPitchBuffer != null)
+            if (passData.CustomPitchBuffer != null)
             {
-                customPitchBuffer.Release();
-                customPitchBuffer = null;
+                passData.CustomPitchBuffer.Release();
+                passData.CustomPitchBuffer = null;
             }
         }
 
@@ -603,7 +595,7 @@ namespace Simulator.Sensors
 
                 int lineCount = 0;
                 // Variable names according to 7 column csv file rs_m1.csv by column names
-                
+
                 while ((line = file.ReadLine()) != null)
                 {
                     //try 
@@ -627,29 +619,49 @@ namespace Simulator.Sensors
                     // Debug.Log($"Line[{lineCount++}] - A:{radiansA}, B:{degreesB}, C:{degreesOffsetC}, D:{radianD_Result1}, E:{radiansE}, F:{radianF_Result2}, G:{sectorG}, H:{positiveSectorH}.\nPass:{passIndex}");
                     if (anglePassAmount > 1 && anglesPerPass > 0 && lineCount > anglesPerPass) break;
                 }
+
                 //catch (Exception e){ Debug.LogError(e.Message);}
                 //Debug.Log($"first angle in pass {pass}: {p1[0][0]}");
-                filePassData[pass] = new PassData { P1 = p1, P2 = p2, Lines = lines };
+                filePassData[pass] = new PassData
+                {
+                    P1 = p1, P2 = p2, 
+                    Lines = lines, 
+                    CustomYaw = new float[customSectors, customPoints],
+                    CustomPitch = new float[customSectors, customPoints], 
+                    CustomIndex = new int[customSectors],
+                    CustomSize = new int[customSectors]
+                };
+
+                ExtractAngles(filePassData[pass]);
             }
         }
 
-        private void ExtractAngles(ref float[,] yaw, ref float[,] pitch, ref int[] size, ref int[] index,
-            PassData passData)
+        private void ExtractAngles(PassData passData)
         {
             int sum = 0;
             for (int i = 0; i < customSectors; i++)
             {
                 for (int j = 0; j < passData.Lines[i]; j++)
                 {
-                    yaw[i, j] = passData.P1[i][j];
-                    pitch[i, j] = passData.P2[i][j];
+                    passData.CustomYaw[i, j] = passData.P1[i][j];
+                    passData.CustomPitch[i, j] = passData.P2[i][j];
                 }
 
-                size[i] = passData.Lines[i];
-                index[i] = sum;
-                sum += size[i];
+                passData.CustomSize[i] = passData.Lines[i];
+                passData.CustomIndex[i] = sum;
+                sum += passData.CustomSize[i];
                 //print("i= " + i + " " + size[i] + " " + index[i]);
             }
+            
+            passData.CustomSizeBuffer = new ComputeBuffer(customSectors, 4);
+            passData.CustomIndexBuffer = new ComputeBuffer(customSectors, 4);
+            passData.CustomYawBuffer = new ComputeBuffer(customSectors * customPoints, 4);
+            passData.CustomPitchBuffer = new ComputeBuffer(customSectors * customPoints, 4);
+            passData.CustomSizeBuffer.SetData(passData.CustomSize);
+            passData.CustomIndexBuffer.SetData(passData.CustomIndex);
+            passData.CustomYawBuffer.SetData(passData.CustomYaw);
+            passData.CustomPitchBuffer.SetData(passData.CustomPitch);
+            
         }
     }
 }
