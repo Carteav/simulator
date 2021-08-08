@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &2840405476243719362
+--- !u!1 &1559022459245937123
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,9 +8,76 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 196975099158831488}
-  - component: {fileID: 6975258990944744215}
-  - component: {fileID: 7233528192790062273}
+  - component: {fileID: 1048874624813667386}
+  - component: {fileID: 9160704279255881215}
+  m_Layer: 0
+  m_Name: RoboBpearlLidar
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1048874624813667386
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1559022459245937123}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 8858160714963574751}
+  m_Father: {fileID: 0}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &9160704279255881215
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1559022459245937123}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ff83cc872c616a8baae1c27b2a0032f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Name: Bpearl Lidar
+  Topic: /lidar
+  Frame: frame
+  ParentTransform: {fileID: 0}
+  TemplateIndex: 0
+  VerticalRayAngles: []
+  LaserCount: 32
+  FieldOfView: 40
+  CenterAngle: 10
+  MinDistance: 0.5
+  MaxDistance: 100
+  RotationFrequency: 5
+  MeasurementsPerRotation: 360
+  Compensated: 1
+  Top: {fileID: 0}
+  PointSize: 2
+  PointColor: {r: 1, g: 0, b: 0, a: 1}
+  Custom: 1
+  customLidarComputeShader: {fileID: 7200000, guid: 2a61b1f6dbed5ce39a85093b5ce8b05c,
+    type: 3}
+  anglesFile: rs_bpearl.csv
+  anglePassAmount: 1
+  anglesPerPass: 0
+--- !u!1 &7024974710889859346
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8858160714963574751}
+  - component: {fileID: 1313097190764054080}
+  - component: {fileID: 4261120283522580210}
   m_Layer: 0
   m_Name: Camera
   m_TagString: Untagged
@@ -18,28 +85,28 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &196975099158831488
+--- !u!4 &8858160714963574751
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2840405476243719362}
+  m_GameObject: {fileID: 7024974710889859346}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
-  m_Father: {fileID: 2793506440945998060}
+  m_Father: {fileID: 1048874624813667386}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!20 &6975258990944744215
+--- !u!20 &1313097190764054080
 Camera:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2840405476243719362}
-  m_Enabled: 0
+  m_GameObject: {fileID: 7024974710889859346}
+  m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 1
   m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
@@ -63,7 +130,7 @@ Camera:
   m_Depth: 0
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 2147491347
+    m_Bits: 4294967295
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
@@ -75,13 +142,13 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!114 &7233528192790062273
+--- !u!114 &4261120283522580210
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2840405476243719362}
+  m_GameObject: {fileID: 7024974710889859346}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 23c1ce4fb46143f46bc5cb5224c934f6, type: 3}
@@ -165,8 +232,8 @@ MonoBehaviour:
   hasPersistentHistory: 0
   m_RenderingPathCustomFrameSettings:
     bitDatas:
-      data1: 70005810528093
-      data2: 4539628424389459968
+      data1: 70297877217101
+      data2: 4539628425463136256
     lodBias: 1
     lodBiasMode: 0
     lodBiasQualityLevel: 0
@@ -179,69 +246,3 @@ MonoBehaviour:
       data1: 0
       data2: 0
   defaultFrameSettings: 0
---- !u!1 &8814546918320267595
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2793506440945998060}
-  - component: {fileID: -4532058702488435227}
-  m_Layer: 0
-  m_Name: CarteavLidarSensor
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &2793506440945998060
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8814546918320267595}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_Children:
-  - {fileID: 196975099158831488}
-  m_Father: {fileID: 0}
-  m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &-4532058702488435227
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8814546918320267595}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0ce32127906323266bf76535ffea2bac, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  Name: Carteav Lidar Sensor
-  Topic: /lidar
-  Frame: frame
-  ParentTransform: {fileID: 0}
-  TemplateIndex: 0
-  VerticalRayAngles: []
-  LaserCount: 32
-  FieldOfView: 40
-  CenterAngle: 10
-  MinDistance: 0.5
-  MaxDistance: 100
-  RotationFrequency: 5
-  MeasurementsPerRotation: 360
-  Compensated: 1
-  Top: {fileID: 0}
-  PointSize: 2
-  PointColor: {r: 1, g: 0, b: 0, a: 1}
-  Custom: 1
-  customLidarComputeShader: {fileID: 7200000, guid: 2a61b1f6dbed5ce39a85093b5ce8b05c,
-    type: 3}
-  anglesFile: rs_m1.csv
-  anglePassAmount: 1
