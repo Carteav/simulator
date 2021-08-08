@@ -23,7 +23,7 @@ using Object = UnityEngine.Object;
 
 namespace Simulator.Sensors
 {
-    [SensorType("Lidar", new[] {typeof(PointCloudData)})]
+    [SensorType("Lidar", new[] { typeof(PointCloudData) })]
     public class CarteavLidarSensor : LidarSensorBase
     {
         /* Custom Properties */
@@ -32,23 +32,23 @@ namespace Simulator.Sensors
             public List<List<float>> P1;
             public List<List<float>> P2;
             public int[] Lines;
-
         }
-        
-        
+
+
         public bool Custom;
 
-        [FormerlySerializedAs("CustomLidarComputeShader")] [SerializeField]
-        private ComputeShader customLidarComputeShader;
+        [SerializeField] private ComputeShader customLidarComputeShader;
 
         [SerializeField] private string anglesFile;
         [Range(1, 360)] [SerializeField] private int anglePassAmount;
         [SerializeField] private int anglesPerPass;
-        private int passIndex;
+        [SerializeField] private float timePerPass;
+        private float timeSincePass;
+        private int passIndex = 0;
 
         private Dictionary<int, PassData> filePassData =
             new Dictionary<int, PassData>();
-
+        
         
         private int customPoints = 500000;
         private int customSectors = 24;
@@ -123,12 +123,12 @@ namespace Simulator.Sensors
                 StartLatitudeAngle = 90.0f - VerticalRayAngles.Min();
                 EndLatitudeAngle = 90.0f - VerticalRayAngles.Max();
                 FieldOfView = StartLatitudeAngle - EndLatitudeAngle;
-                MaxAngle = Mathf.Max((float) (StartLatitudeAngle - 90.0), (float) (90.0 - EndLatitudeAngle));
+                MaxAngle = Mathf.Max((float)(StartLatitudeAngle - 90.0), (float)(90.0 - EndLatitudeAngle));
             }
 
             float num1 = 97.5f;
-            SinStartLongitudeAngle = Mathf.Sin(num1 * ((float) Math.PI / 180f));
-            CosStartLongitudeAngle = Mathf.Cos(num1 * ((float) Math.PI / 180f));
+            SinStartLongitudeAngle = Mathf.Sin(num1 * ((float)Math.PI / 180f));
+            CosStartLongitudeAngle = Mathf.Cos(num1 * ((float)Math.PI / 180f));
             MaxAngle = Mathf.Max(MaxAngle,
                 Mathf.Max(CalculateFovAngle(StartLatitudeAngle, num1), CalculateFovAngle(EndLatitudeAngle, num1)));
             SinLatitudeAngles = new float[LaserCount];
@@ -156,8 +156,8 @@ namespace Simulator.Sensors
                 float startLatitudeAngle = StartLatitudeAngle;
                 while (index < LaserCount)
                 {
-                    SinLatitudeAngles[index] = Mathf.Sin(startLatitudeAngle * ((float) Math.PI / 180f));
-                    CosLatitudeAngles[index] = Mathf.Cos(startLatitudeAngle * ((float) Math.PI / 180f));
+                    SinLatitudeAngles[index] = Mathf.Sin(startLatitudeAngle * ((float)Math.PI / 180f));
+                    CosLatitudeAngles[index] = Mathf.Cos(startLatitudeAngle * ((float)Math.PI / 180f));
                     ++index;
                     startLatitudeAngle -= num2;
                 }
@@ -167,30 +167,32 @@ namespace Simulator.Sensors
                 for (int index = 0; index < LaserCount; ++index)
                 {
                     SinLatitudeAngles[index] =
-                        Mathf.Sin((float) ((90.0 - VerticalRayAngles[index]) * (Math.PI / 180.0)));
+                        Mathf.Sin((float)((90.0 - VerticalRayAngles[index]) * (Math.PI / 180.0)));
                     CosLatitudeAngles[index] =
-                        Mathf.Cos((float) ((90.0 - VerticalRayAngles[index]) * (Math.PI / 180.0)));
+                        Mathf.Cos((float)((90.0 - VerticalRayAngles[index]) * (Math.PI / 180.0)));
                 }
             }
 
             CosLatitudeAnglesBuffer.SetData(CosLatitudeAngles);
             SinLatitudeAnglesBuffer.SetData(SinLatitudeAngles);
             DeltaLongitudeAngle = (15.0f / Mathf.CeilToInt((15.0f / (360.0f / MeasurementsPerRotation))));
-            RenderTextureHeight = (16 * Mathf.CeilToInt((float) (2.0 * MaxAngle * (float) LaserCount / FieldOfView)));
-            RenderTextureWidth = (8 * Mathf.CeilToInt((float) (15.0 / (360.0 / (float) MeasurementsPerRotation))));
-            float num3 = (float) (2.0 * MinDistance) * Mathf.Tan(0.1308997f);
-            float num4 = (float) (2.0 * MinDistance) * Mathf.Tan((float) (MaxAngle * (Math.PI / 180.0)));
+            RenderTextureHeight = (16 * Mathf.CeilToInt((float)(2.0 * MaxAngle * (float)LaserCount / FieldOfView)));
+            RenderTextureWidth = (8 * Mathf.CeilToInt((float)(15.0 / (360.0 / (float)MeasurementsPerRotation))));
+            float num3 = (float)(2.0 * MinDistance) * Mathf.Tan(0.1308997f);
+            float num4 = (float)(2.0 * MinDistance) * Mathf.Tan((float)(MaxAngle * (Math.PI / 180.0)));
             XScale = (num3 / RenderTextureWidth);
             YScale = (num4 / RenderTextureHeight);
-            float num5 = 1f / Mathf.Tan((float) (MaxAngle * (Math.PI / 180.0)));
+            float num5 = 1f / Mathf.Tan((float)(MaxAngle * (Math.PI / 180.0)));
             float num6 = 1f / Mathf.Tan(0.1308997f);
             float num7 = (MaxDistance + MinDistance) / (MinDistance - MaxDistance);
-            float num8 = (float) (2.0 * MaxDistance * MinDistance / (MinDistance - MaxDistance));
+            float num8 = (float)(2.0 * MaxDistance * MinDistance / (MinDistance - MaxDistance));
             Matrix4x4 matrix4x4 = new Matrix4x4(new Vector4(num6, 0.0f, 0.0f, 0.0f),
                 new Vector4(0.0f, num5, 0.0f, 0.0f), new Vector4(0.0f, 0.0f, num7, -1f),
                 new Vector4(0.0f, 0.0f, num8, 0.0f));
             // ISSUE: explicit constructor call
             //((Matrix4x4) ref matrix4x4).\u002Ector(new Vector4(num6, 0.0f, 0.0f, 0.0f), new Vector4(0.0f, num5, 0.0f, 0.0f), new Vector4(0.0f, 0.0f, num7, -1f), new Vector4(0.0f, 0.0f, num8, 0.0f));
+
+
             SensorCamera.nearClipPlane = MinDistance;
             SensorCamera.farClipPlane = MaxDistance;
             SensorCamera.projectionMatrix = matrix4x4;
@@ -466,7 +468,7 @@ namespace Simulator.Sensors
             customPitch = new float[customSectors, customPoints];
             customSize = new int[customSectors];
             customIndex = new int[customSectors];
-            
+            timeSincePass = Time.time;
             LoadFileAngleData();
 
             base.Init();
@@ -481,8 +483,15 @@ namespace Simulator.Sensors
                 Debug.Log($"reset index {currentIndexOffset}");
             }
 
-            int idx = (currentIndexOffset + req.Index / 15 + 24) % 24;
+            int idx = (currentIndexOffset + req.Index / 15 + customSectors) % customSectors;
 
+            if (Time.time - timeSincePass > timePerPass && anglePassAmount > 1 && idx + 1 == customSectors)
+            {
+                timeSincePass = Time.time;
+                passIndex = (passIndex + 1) % anglePassAmount;
+                CustomReset();
+            }
+            
             // Set Custom Properties //
             cmd.SetComputeIntParam(cs, Properties.IdxCustom, idx);
             cmd.SetComputeIntParam(cs, Properties.PointsCustom, customPoints);
@@ -499,6 +508,8 @@ namespace Simulator.Sensors
             {
                 cmd.DispatchCompute(cs, kernel, 1, yDimension, 1);
             }
+            
+            
         }
 
 
@@ -530,7 +541,7 @@ namespace Simulator.Sensors
             try
             {
                 // Will not overwrite if the destination file already exists.
-                System.IO.File.Copy(path + $"/{anglesFile}", path + $"/../simulator_Data/{anglesFile}", true);
+                System.IO.File.Copy(path + $"/Carteav/{anglesFile}", path + $"/../simulator_Data/{anglesFile}", true);
             }
             // Catch exception if the file was already copied.
             catch (IOException copyError)
@@ -539,7 +550,7 @@ namespace Simulator.Sensors
             }
 
             //Read LIDAR angles file
-            GetTwoArraysFromFile(path + $"/{anglesFile}");
+            GetTwoArraysFromFile(path + $"/Carteav/{anglesFile}");
         }
 
         private void ReleaseCustomBuffers()
@@ -572,6 +583,7 @@ namespace Simulator.Sensors
 
         public void GetTwoArraysFromFile(string filein)
         {
+            System.IO.StreamReader file = new System.IO.StreamReader(filein);
             for (int pass = 0; pass < anglePassAmount; pass++)
             {
                 string line;
@@ -591,7 +603,7 @@ namespace Simulator.Sensors
 
                 int lineCount = 0;
                 // Variable names according to 7 column csv file rs_m1.csv by column names
-                System.IO.StreamReader file = new System.IO.StreamReader(filein);
+                
                 while ((line = file.ReadLine()) != null)
                 {
                     //try 
@@ -600,28 +612,29 @@ namespace Simulator.Sensors
                     float degreesB = radiansA * 180f / Mathf.PI;
                     int sectorG =
                         degreesB > 0
-                            ? (int) (degreesB / 15f)
-                            : (int) (degreesB / 15f) - 1; //int.Parse(columns[7], CultureInfo.InvariantCulture);
+                            ? (int)(degreesB / 15f)
+                            : (int)(degreesB / 15f) - 1; //int.Parse(columns[7], CultureInfo.InvariantCulture);
                     int positiveSectorH = sectorG < 0 ? sectorG + 24 : sectorG;
                     float degreesOffsetC = sectorG * 15 - degreesB + 90f + 7.5f; //(15 / 2)
                     float radianD_Result1 = degreesOffsetC * Mathf.PI / 180f;
-                    float radiansE = float.Parse(columns[1], CultureInfo.InvariantCulture);
+                    float radiansE = 0;
+                    radiansE = float.Parse(columns[1], CultureInfo.InvariantCulture);
                     float radianF_Result2 = radiansE + Mathf.PI;
                     p1[positiveSectorH].Add(radianD_Result1);
                     p2[positiveSectorH].Add(radianF_Result2);
                     lines[positiveSectorH]++;
+                    lineCount++;
                     // Debug.Log($"Line[{lineCount++}] - A:{radiansA}, B:{degreesB}, C:{degreesOffsetC}, D:{radianD_Result1}, E:{radiansE}, F:{radianF_Result2}, G:{sectorG}, H:{positiveSectorH}.\nPass:{passIndex}");
-                    if (anglePassAmount > 0 && anglesPerPass > 0 && lineCount > anglesPerPass) break;
+                    if (anglePassAmount > 1 && anglesPerPass > 0 && lineCount > anglesPerPass) break;
                 }
                 //catch (Exception e){ Debug.LogError(e.Message);}
-
-                filePassData[pass] = new PassData{P1 = p1, P2 = p2, Lines = lines};
+                //Debug.Log($"first angle in pass {pass}: {p1[0][0]}");
+                filePassData[pass] = new PassData { P1 = p1, P2 = p2, Lines = lines };
             }
-
-            
         }
 
-        private void ExtractAngles(ref float[,] yaw, ref float[,] pitch, ref int[] size, ref int[] index, PassData passData)
+        private void ExtractAngles(ref float[,] yaw, ref float[,] pitch, ref int[] size, ref int[] index,
+            PassData passData)
         {
             int sum = 0;
             for (int i = 0; i < customSectors; i++)
