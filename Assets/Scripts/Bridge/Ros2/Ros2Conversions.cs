@@ -15,7 +15,7 @@ using Unity.Mathematics;
 
 namespace Simulator.Bridge.Ros2
 {
-    static class Ros2Conversions
+    public static class Ros2Conversions
     {
         public static Ros.CompressedImage ConvertFrom(ImageData data)
         {

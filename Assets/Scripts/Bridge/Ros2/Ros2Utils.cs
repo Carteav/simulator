@@ -10,7 +10,7 @@ using System.Collections.Generic;
 
 namespace Simulator.Bridge.Ros2
 {
-    static class Ros2Utils
+    public static class Ros2Utils
     {
         static readonly Dictionary<Type, string> BuiltinMessageTypes = new Dictionary<Type, string>
         {
