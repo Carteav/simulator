@@ -467,9 +467,6 @@ namespace Simulator.Sensors
 
         public override void Init()
         {
-            transform.localPosition = new Vector3(0.6f, 1.46f, 3f);
-            transform.localRotation = Quaternion.identity;
-
             RuntimeSettings.Instance.LidarComputeShader = customLidarComputeShader;
 
 

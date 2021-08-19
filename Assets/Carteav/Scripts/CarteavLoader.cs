@@ -5,9 +5,9 @@ using UnityEngine;
 public class CarteavLoader : MonoBehaviour
 {
     public string Address { get; private set; }
-    void Start()
+    void Awake()
     {
-        
+        DontDestroyOnLoad(gameObject);
     }
 
     // Update is called once per frame

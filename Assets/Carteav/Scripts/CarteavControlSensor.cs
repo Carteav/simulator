@@ -28,15 +28,19 @@ namespace Carteav
         protected Subscriber<CartPath> Subscribe;
         protected BridgeInstance Bridge;
         protected SimcartInput CartInput;
-
+        
+        
         private CartState state;
         private CartPath path;
         private int currentPointIndex;
-        private Vector3 offset;
-        [SerializeField]
-        private float speedMps;
 
         private Transform cartTransform;
+        private float MaxSteering = 0.5f;
+        private float MaxAcceleration = 20f;
+        private float PointReachRange = 2f;
+        private DataVisualizer visualizer;
+        
+        
         public void Update()
         {
             switch (state)
@@ -45,7 +49,6 @@ namespace Carteav
                     FollowPathUpdate();
                     break;
             }
-            
         }
 
         public override void OnBridgeSetup(BridgeInstance bridge)
@@ -56,6 +59,8 @@ namespace Carteav
             state = CartState.Inactive;
             CartInput = transform.parent.GetComponentInChildren<SimcartInput>();
             cartTransform = transform.parent;
+            visualizer = FindObjectOfType<DataVisualizer>();
+            
             var plugin = bridge.Plugin;
 
             Ros2BridgeFactory ros2Factory = new Ros2BridgeFactory();
@@ -83,7 +88,10 @@ namespace Carteav
         {
             Debug.Log($"Received path {path.PathId}");
             
-            FollowPath(path);
+            //FollowPath(path);
+            Vector3 offset = cartTransform.position -  path.Points[0].Point;
+            offset.y = 0;
+            visualizer.VisualizePath(path, offset);
         }
 
         public void FollowPath(CartPath path)
@@ -93,20 +101,24 @@ namespace Carteav
                 Debug.LogError($"Path points received are either missing or too few to follow.");
                 return;
             }
+            
             state = CartState.FollowPath;
             currentPointIndex = 0;
             this.path = path;
-            offset = path.Points[0].Point - cartTransform.position;
-            CartInput.AccelInput = 20;
-
         }
 
         private void FollowPathUpdate()
         {
+            Vector3 offset = path.Points[0].Point - cartTransform.position;
+            offset.y = 0;
             //Vector3 originPoint = path.Points[currentPointIndex].Point;
             Vector3 destinationPoint = path.Points[currentPointIndex + 1].Point + offset;
-            Vector3 towards = destinationPoint - cartTransform.position;
-            if (towards.sqrMagnitude <= float.Epsilon)
+            Vector3 cartPosition = cartTransform.position;
+            destinationPoint.y = 0;
+            cartPosition.y = 0;
+            Vector3 towards = destinationPoint - cartPosition;
+            
+            if (towards.sqrMagnitude <= PointReachRange)
             {
                 currentPointIndex++;
                 if (currentPointIndex >= path.Points.Count)
@@ -115,18 +127,22 @@ namespace Carteav
                     return;
                 }
                 destinationPoint = path.Points[currentPointIndex + 1].Point + offset;
-                towards = destinationPoint - cartTransform.position;
+                towards = destinationPoint - cartPosition;
             }
-            
-            Debug.Log($"Towards: {towards}  Normalized: {towards.normalized}  Position: {cartTransform.position}  Index: {currentPointIndex}");
             var towardsNormalized = towards.normalized;
-            // if (towardsNormalized != Vector3.zero)
-            //     transform.forward = towardsNormalized;
-            float angle = Vector3.Angle(cartTransform.forward, towardsNormalized);
-            CartInput.SteerInput = angle / 100f;
-            //cartTransform.position += towardsNormalized * speedMps * Time.deltaTime;
-            Debug.Log($"New Position: {cartTransform.position}");
+            var cartForwards = cartTransform.forward;
+            float angle = Vector3.SignedAngle(cartForwards, towardsNormalized, cartTransform.up);
+            float distance = Vector3.Distance(cartPosition, destinationPoint);
+            var steering = Mathf.Clamp(angle / 180f, -MaxSteering, MaxSteering);
+            var acceleration = (PointReachRange < distance ? 1 : distance / PointReachRange) * (MaxSteering - Mathf.Abs(steering)) * MaxAcceleration;
+            CartInput.AccelInput = acceleration;
+            CartInput.SteerInput = steering;
+            Debug.Log($"Position:{cartPosition}  Destination:{destinationPoint}  Angle:{angle}  " +
+                      $"Steering:{steering}  Acceleration:{acceleration}\n" +
+                      $"Distance:{distance}  " +
+                      $"Index:{currentPointIndex}  Towards:{towards}  Normalized:{towardsNormalized}");
         }
+        
 
         public class CartPath
         {
@@ -151,7 +167,7 @@ namespace Carteav
             public CartPoint(Carteav.Messages.CartPoint pointStruct)
             {
                 var v = pointStruct.point;
-                Point = new Vector3 () { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+                Point = new Vector3 () { x = (float)v.x, y = (float)v.z, z = (float)v.y };
                 MAXVelocityMps = pointStruct.max_velocity_mps;
                 ReqVelocityMps = pointStruct.req_velocity_mps;
                 CurrentEtaSec = pointStruct.current_eta_sec;
