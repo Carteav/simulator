@@ -64,10 +64,6 @@ namespace Carteav
             var plugin = bridge.Plugin;
 
             Ros2BridgeFactory ros2Factory = new Ros2BridgeFactory();
-            ros2Factory.RegPublisher<DetectedRadarObjectData, DetectedRadarObjectArray>(plugin,
-                Ros2Conversions.ConvertFrom);
-            ros2Factory.RegSubscriber<DetectedRadarObjectData, DetectedRadarObjectArray>(plugin,
-                Ros2Conversions.ConvertTo);
             ros2Factory.RegSubscriber<CartPath, Carteav.Messages.CartPath>(plugin,
                 (bridgeType) => new CartPath(bridgeType));
 
