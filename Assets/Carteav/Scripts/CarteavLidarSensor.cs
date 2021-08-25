@@ -57,6 +57,9 @@ namespace Simulator.Sensors
         [SerializeField] private float timePerPass;
         private float timeSincePass;
         private int passIndex = 0;
+        
+        private BaseLink baseLink;
+        [SerializeField] private bool transformCloudPointsToBase = true;
 
         private Dictionary<int, PassData> filePassData =
             new Dictionary<int, PassData>();
@@ -248,13 +251,28 @@ namespace Simulator.Sensors
             EndReadMarker.End();
         }
 
+        
         protected override void SendMessage()
         {
             if (Bridge == null || Bridge.Status != Status.Connected)
                 return;
-            Matrix4x4 worldToLocal = LidarTransform;
-            if (Compensated != null)
-                worldToLocal = worldToLocal * transform.worldToLocalMatrix;
+            Matrix4x4 pointsTransform = LidarTransform;
+            Matrix4x4 worldToLocal;
+            if (transformCloudPointsToBase)
+            {
+                worldToLocal = baseLink.transform.worldToLocalMatrix;
+            }
+            else
+            {
+                worldToLocal = transform.worldToLocalMatrix;
+            }
+
+            if (Compensated)
+            {
+                pointsTransform = pointsTransform * worldToLocal;
+            }
+                
+            
             PointCloudBuffer.GetData(Points);
             Task.Run(() =>
             {
@@ -268,7 +286,7 @@ namespace Simulator.Sensors
                 SendSequence = sendSequence + 1;
                 pointCloudData.Sequence = sendSequence;
                 pointCloudData.LaserCount = CurrentLaserCount;
-                pointCloudData.Transform = worldToLocal;
+                pointCloudData.Transform = pointsTransform;
                 pointCloudData.Points = Points;
                 publish.Invoke(pointCloudData);
             });
@@ -469,7 +487,7 @@ namespace Simulator.Sensors
         {
             RuntimeSettings.Instance.LidarComputeShader = customLidarComputeShader;
 
-
+            baseLink = transform.parent.GetComponentInChildren<BaseLink>();
             timeSincePass = Time.time;
             LoadFileAngleData();
 
