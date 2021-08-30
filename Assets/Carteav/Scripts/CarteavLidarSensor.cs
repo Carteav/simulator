@@ -45,8 +45,8 @@ namespace Simulator.Sensors
             public ComputeBuffer CustomYawBuffer;
             public ComputeBuffer CustomPitchBuffer;
         }
-
-        [SerializeField] private bool pointCloudBaselinkTransform = true;
+        
+        [SensorParameter] public bool PointCloudTransform = true;
         [SerializeField] private bool Custom;
         [SerializeField] private ComputeShader customLidarComputeShader;
         [SerializeField] private string anglesFile;
@@ -251,7 +251,7 @@ namespace Simulator.Sensors
                 return;
             Matrix4x4 pointsTransform = LidarTransform;
             Matrix4x4 worldToLocal;
-            if (pointCloudBaselinkTransform)
+            if (PointCloudTransform)
             {
                 worldToLocal = baseLink.transform.worldToLocalMatrix;
             }
