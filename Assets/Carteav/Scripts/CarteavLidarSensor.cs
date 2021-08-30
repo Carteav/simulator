@@ -31,7 +31,7 @@ namespace Simulator.Sensors
     public class CarteavLidarSensor : LidarSensorBase
     {
         /* Custom Properties */
-        class PassData
+        public class PassData
         {
             public List<List<float>> P1;
             public List<List<float>> P2;
@@ -49,29 +49,31 @@ namespace Simulator.Sensors
 
         public bool Custom;
 
-        [SerializeField] private ComputeShader customLidarComputeShader;
+        [SerializeField] protected ComputeShader customLidarComputeShader;
 
-        [SerializeField] private string anglesFile;
-        [Range(1, 360)] [SerializeField] private int anglePassAmount;
-        [SerializeField] private int anglesPerPass;
-        [SerializeField] private float timePerPass;
-        private float timeSincePass;
-        private int passIndex = 0;
+        [SerializeField] protected string anglesFile;
+        [Range(1, 360)] [SerializeField] protected int anglePassAmount;
+        [SerializeField] protected int anglesPerPass;
+        [SerializeField] protected float timePerPass;
+        protected float timeSincePass;
+        protected int passIndex = 0;
         
-        private BaseLink baseLink;
-        [SerializeField] private bool transformCloudPointsToBase = true;
+        protected BaseLink baseLink;
+        [SerializeField] protected bool transformCloudPointsToBase = true;
 
-        private Dictionary<int, PassData> filePassData =
+        protected Dictionary<int, PassData> filePassData =
             new Dictionary<int, PassData>();
 
 
-        private int customPoints = 500000;
-        private int customSectors = 24;
+        protected int customPoints = 500000;
+        protected int customSectors = 24;
 
-        private bool lastFrameCustom;
-        private bool indexReset = false;
+        protected bool lastFrameCustom;
+        protected bool indexReset = false;
 
-        private int currentIndexOffset = 0;
+        protected int currentIndexOffset = 0;
+
+        [SerializeField] protected float centerAngleModifier = 1f;
         //
 
 
