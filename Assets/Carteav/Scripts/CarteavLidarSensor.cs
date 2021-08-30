@@ -121,7 +121,7 @@ namespace Simulator.Sensors
             AngleStart = 0.0f;
             if (VerticalRayAngles.Count == 0)
             {
-                MaxAngle = (Mathf.Abs(CenterAngle) + FieldOfView / 2.0f);
+                MaxAngle = (Mathf.Abs(CenterAngle * centerAngleModifier) + FieldOfView / 2.0f);
                 StartLatitudeAngle = (90.0f + MaxAngle);
                 if (CenterAngle < 0.0)
                     StartLatitudeAngle = (StartLatitudeAngle - (MaxAngle * 2.0f - FieldOfView));
