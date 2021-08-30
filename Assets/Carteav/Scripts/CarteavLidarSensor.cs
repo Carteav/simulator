@@ -46,37 +46,28 @@ namespace Simulator.Sensors
             public ComputeBuffer CustomPitchBuffer;
         }
 
-
-        public bool Custom;
-
-        [SerializeField] protected ComputeShader customLidarComputeShader;
-
-        [SerializeField] protected string anglesFile;
-        [Range(1, 360)] [SerializeField] protected int anglePassAmount;
-        [SerializeField] protected int anglesPerPass;
-        [SerializeField] protected float timePerPass;
-        protected float timeSincePass;
-        protected int passIndex = 0;
+        [SerializeField] private bool pointCloudBaselinkTransform = true;
+        [SerializeField] private bool Custom;
+        [SerializeField] private ComputeShader customLidarComputeShader;
+        [SerializeField] private string anglesFile;
+        [Range(1, 360)] [SerializeField] private int anglePassAmount;
+        [SerializeField] private int anglesPerPass;
+        [SerializeField] private float timePerPass;
         
+        
+        
+            
         protected BaseLink baseLink;
-        [SerializeField] protected bool transformCloudPointsToBase = true;
-
-        protected Dictionary<int, PassData> filePassData =
-            new Dictionary<int, PassData>();
-
-
-        protected int customPoints = 500000;
-        protected int customSectors = 24;
-
-        protected bool lastFrameCustom;
-        protected bool indexReset = false;
-
-        protected int currentIndexOffset = 0;
-
-        [SerializeField] protected float centerAngleModifier = 1f;
+        protected Dictionary<int, PassData> filePassData = new Dictionary<int, PassData>();
+        
+        private int customPoints = 500000;
+        private int customSectors = 24;
+        private bool lastFrameCustom;
+        private bool indexReset = false;
+        private int currentIndexOffset = 0;
+        private float timeSincePass;
+        private int passIndex = 0;
         //
-
-
         public void ApplyTemplate()
         {
             Template template = Template.Templates[TemplateIndex];
@@ -121,7 +112,7 @@ namespace Simulator.Sensors
             AngleStart = 0.0f;
             if (VerticalRayAngles.Count == 0)
             {
-                MaxAngle = (Mathf.Abs(CenterAngle * centerAngleModifier) + FieldOfView / 2.0f);
+                MaxAngle = (Mathf.Abs(CenterAngle) + FieldOfView / 2.0f);
                 StartLatitudeAngle = (90.0f + MaxAngle);
                 if (CenterAngle < 0.0)
                     StartLatitudeAngle = (StartLatitudeAngle - (MaxAngle * 2.0f - FieldOfView));
@@ -260,7 +251,7 @@ namespace Simulator.Sensors
                 return;
             Matrix4x4 pointsTransform = LidarTransform;
             Matrix4x4 worldToLocal;
-            if (transformCloudPointsToBase)
+            if (pointCloudBaselinkTransform)
             {
                 worldToLocal = baseLink.transform.worldToLocalMatrix;
             }

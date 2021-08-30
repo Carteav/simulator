@@ -62,7 +62,7 @@ namespace Simulator.Sensors
         public int LaserCount = 32;
 
         [SensorParameter]
-        [Range(1.0f, 45.0f)]
+        [Range(1.0f, 90.0f)]
         public float FieldOfView = 40.0f;
 
         [SensorParameter]
