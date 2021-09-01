@@ -272,7 +272,7 @@ namespace Carteav
         public Polygon(Carteav.Messages.Polygon polygon)
         {
             Points = polygon.points.ToList()
-                .ConvertAll(v => new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y });
+                .ConvertAll(v => new Vector3() { x = -(float)v.x, y = (float)v.z, z = -(float)v.y });//should be: x=-y`;y=z`; z=x`;
         }
 
         public Polygon() { }
