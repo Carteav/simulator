@@ -108,12 +108,12 @@ namespace Carteav
             boundariesInUse.ForEach(boundary => pools.ReturnInstance(boundary.gameObject));
             boundariesInUse.Clear();
             var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
-            var com = new Vector3();
-            mainAreaPolygon.Points.ForEach(p => com += p);
-            com /= mainAreaPolygon.Points.Count;
+            var offset = new Vector3();
+            // mainAreaPolygon.Points.ForEach(p => offset += p);
+            // offset /= mainAreaPolygon.Points.Count;
             
             MapBoundary mainArea = pools.GetInstance(boundaryPrefab.gameObject).GetComponent<MapBoundary>();
-            InitBoundary(mainArea, mainAreaPolygon, -com, scale);
+            InitBoundary(mainArea, mainAreaPolygon, offset, scale);
             var mainBoundaryTransform = mainArea.transform;
             mainBoundaryTransform.position = boundaryOrientationTransform.position;
             mainBoundaryTransform.localScale = boundaryOrientationTransform.localScale;
@@ -123,7 +123,7 @@ namespace Carteav
             foreach (var hole in holes)
             {
                 var holeObj = pools.GetInstance(boundaryHolePrefab.gameObject).GetComponent<MapBoundary>();
-                InitBoundary(holeObj, hole, -com, scale);
+                InitBoundary(holeObj, hole, offset, scale);
                 var holeTransform = holeObj.transform;
                 holeTransform.parent = mainBoundaryTransform;
                 holeTransform.localPosition = new Vector3(0, 0, -0.01f);
@@ -136,7 +136,7 @@ namespace Carteav
         private void InitBoundary(MapBoundary boundary, Polygon polygon, Vector3 offset, float scale)
         {
             var points3d = polygon.Points.ConvertAll(vec3 => (vec3 + offset) * scale);
-            boundary.PolygonCollider.points = points3d.ConvertAll(vec3 => (Vector2)vec3).ToArray();
+            boundary.PolygonCollider.points = points3d.ConvertAll(vec3 => new Vector2(vec3.x, vec3.z)).ToArray();
             var mesh = CreatePolygonMesh(points3d);
             boundary.MeshFilter.mesh = mesh;
             boundary.BoundaryOffset = offset;
@@ -148,97 +148,13 @@ namespace Carteav
             Mesh mesh = new Mesh(); //CreateMesh(points.ConvertAll(vec3 => (vec3 - com) * scale),0);
             //polygonCollider.CreateMesh(true, true);
             //mesh.vertices = points.ConvertAll(vec3 => (vec3-com)*scale).ToArray();
-            Triangulator triangulator = new Triangulator(points3d.ConvertAll(vec3 => (Vector2)vec3).ToArray());
+            Triangulator triangulator = new Triangulator(points3d.ConvertAll(vec3 => new Vector2(vec3.x,vec3.z)).ToArray());
             mesh.vertices = points3d.ToArray();
             mesh.triangles = triangulator.Triangulate().Reverse().ToArray();
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
             
-        }
-
-        Mesh CreateMeshOld(List<Vector3> nodePositions, int num)
-        {
-            int x; //Counter
-
-            //Create a new mesh
-            var mesh = new Mesh();
-
-            //Vertices
-            var vertex = new Vector3[nodePositions.Count];
-
-            for (x = 0; x < nodePositions.Count; x++)
-            {
-                vertex[x] = nodePositions[x];
-            }
-
-            //UVs
-            var uvs = new Vector2[vertex.Length];
-
-            for (x = 0; x < vertex.Length; x++)
-            {
-                if ((x % 2) == 0)
-                {
-                    uvs[x] = new Vector2(0, 0);
-                }
-                else
-                {
-                    uvs[x] = new Vector2(1, 1);
-                }
-            }
-
-            //Triangles
-            var tris = new int[3 * (vertex.Length - 2)]; //3 verts per triangle * num triangles
-            int C1, C2, C3;
-
-            if (num == 0)
-            {
-                C1 = 0;
-                C2 = 1;
-                C3 = 2;
-
-                for (x = 0; x < tris.Length; x += 3)
-                {
-                    tris[x] = C1;
-                    tris[x + 1] = C2;
-                    tris[x + 2] = C3;
-
-                    C2++;
-                    C3++;
-                }
-            }
-            else
-            {
-                C1 = 0;
-                C2 = vertex.Length - 1;
-                C3 = vertex.Length - 2;
-
-                for (x = 0; x < tris.Length; x += 3)
-                {
-                    tris[x] = C1;
-                    tris[x + 1] = C2;
-                    tris[x + 2] = C3;
-
-                    C2--;
-                    C3--;
-                }
-            }
-
-            //Assign data to mesh
-            mesh.vertices = vertex;
-            mesh.uv = uvs;
-            mesh.triangles = tris;
-
-            //Recalculations
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            // mesh.Optimize();
-
-            //Name the mesh
-            mesh.name = "MyMesh";
-
-            //Return the mesh
-            return mesh;
         }
 
 

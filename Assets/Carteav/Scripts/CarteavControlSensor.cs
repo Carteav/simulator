@@ -124,7 +124,7 @@ namespace Carteav
             Debug.Log($"Boundaries received {boundaries.MultiPolygons.Count}.");
             if (visualizer != null)
             {
-                visualizer.VisualizeBoundaries(boundaries, 100000f);
+                visualizer.VisualizeBoundaries(boundaries, 1f);
             }
         }
 
@@ -230,8 +230,9 @@ namespace Carteav
 
         public CartPoint(Carteav.Messages.CartPoint pointStruct)
         {
-            var v = pointStruct.point;
-            Point = new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y };
+            var v = pointStruct.point; 
+            //Point = new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y };
+            Point = new Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z };
             MAXVelocityMps = pointStruct.max_velocity_mps;
             ReqVelocityMps = pointStruct.req_velocity_mps;
             CurrentEtaSec = pointStruct.current_eta_sec;
@@ -271,7 +272,7 @@ namespace Carteav
         public Polygon(Carteav.Messages.Polygon polygon)
         {
             Points = polygon.points.ToList()
-                .ConvertAll(v => new Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z });
+                .ConvertAll(v => new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y });
         }
 
         public Polygon() { }
