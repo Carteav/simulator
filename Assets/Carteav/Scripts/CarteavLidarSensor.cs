@@ -67,6 +67,8 @@ namespace Simulator.Sensors
         private int currentIndexOffset = 0;
         private float timeSincePass;
         private int passIndex = 0;
+        private float minAngle = float.MaxValue;
+        private float maxAngle = float.MinValue;
         //
         public void ApplyTemplate()
         {
@@ -126,6 +128,11 @@ namespace Simulator.Sensors
                 FieldOfView = StartLatitudeAngle - EndLatitudeAngle;
                 MaxAngle = Mathf.Max((float)(StartLatitudeAngle - 90.0), (float)(90.0 - EndLatitudeAngle));
             }
+            
+            if (Custom)
+            {
+                CustomReset();
+            }
 
             float num1 = 97.5f;
             SinStartLongitudeAngle = Mathf.Sin(num1 * ((float)Math.PI / 180f));
@@ -173,6 +180,7 @@ namespace Simulator.Sensors
                         Mathf.Cos((float)((90.0 - VerticalRayAngles[index]) * (Math.PI / 180.0)));
                 }
             }
+            
 
             CosLatitudeAnglesBuffer.SetData(CosLatitudeAngles);
             SinLatitudeAnglesBuffer.SetData(SinLatitudeAngles);
@@ -198,10 +206,7 @@ namespace Simulator.Sensors
             SensorCamera.farClipPlane = MaxDistance;
             SensorCamera.projectionMatrix = matrix4x4;
 
-            if (Custom)
-            {
-                CustomReset();
-            }
+            
         }
 
         protected override void EndReadRequest(CommandBuffer cmd, ReadRequest req)
@@ -483,6 +488,7 @@ namespace Simulator.Sensors
             baseLink = transform.parent.GetComponentInChildren<BaseLink>();
             timeSincePass = Time.time;
             LoadFileAngleData();
+            FindMinMaxAngles();
 
             base.Init();
         }
@@ -527,7 +533,12 @@ namespace Simulator.Sensors
         private void CustomReset()
         {
             indexReset = true;
-
+            
+            StartLatitudeAngle = 90.0f - minAngle;
+            EndLatitudeAngle = 90.0f - maxAngle;
+            FieldOfView = StartLatitudeAngle - EndLatitudeAngle;
+            MaxAngle = Mathf.Max((float)(StartLatitudeAngle - 90.0), (float)(90.0 - EndLatitudeAngle));
+            Debug.Log($"Min angle:{minAngle}  Max angle:{maxAngle}  FOV:{FieldOfView}  Start latitude:{StartLatitudeAngle}  End latitude{EndLatitudeAngle}");
             //ReleaseCustomBuffers(filePassData[passIndex]);
 
             // Set Shader Data
@@ -670,6 +681,33 @@ namespace Simulator.Sensors
             passData.CustomYawBuffer.SetData(passData.CustomYaw);
             passData.CustomPitchBuffer.SetData(passData.CustomPitch);
             
+        }
+
+        private void FindMinMaxAngles()
+        {
+            float angle;
+            foreach (var passData in filePassData.Values)
+            {
+                foreach (var angleList in passData.P1)
+                {
+                    foreach (var radianAngle in angleList)
+                    {
+                        angle = (float)(radianAngle * 180f / Math.PI);
+                        minAngle = angle < minAngle ? angle : minAngle;
+                        maxAngle = angle > maxAngle ? angle : maxAngle;
+                    }
+                }
+                
+                foreach (var angleList in passData.P2)
+                {
+                    foreach (var radianAngle in angleList)
+                    {
+                        angle = (float)(radianAngle * 180f / Math.PI);
+                        minAngle = angle < minAngle ? angle : minAngle;
+                        maxAngle = angle > maxAngle ? angle : maxAngle;
+                    }
+                }
+            }
         }
     }
 }
