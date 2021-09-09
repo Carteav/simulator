@@ -76,6 +76,8 @@ namespace Simulator.Api.Commands
 
                     VehicleDetailData vehicleData = await ConnectionManager.API.GetByIdOrName<VehicleDetailData>(name);
                     var config = new AgentConfig(vehicleData.ToVehicleData());
+                    config.Position = position;
+                    config.Rotation = Quaternion.Euler(rotation);
 
                     if (ApiManager.Instance.CachedVehicles.ContainsKey(vehicleData.Name))
                     {
@@ -83,8 +85,7 @@ namespace Simulator.Api.Commands
                     }
                     else
                     {
-                        var progressUpdate = new Progress<Tuple<string,float>> (p => { ConnectionUI.instance.UpdateDownloadProgress(p.Item1, p.Item2); });
-                        var assetModel = await DownloadManager.GetAsset(BundleConfig.BundleTypes.Vehicle, vehicleData.AssetGuid, vehicleData.Name, progressUpdate);
+                        var assetModel = await DownloadManager.GetAsset(BundleConfig.BundleTypes.Vehicle, vehicleData.AssetGuid, vehicleData.Name);
                         config.Prefab = Loader.LoadVehicleBundle(assetModel.LocalPath);
                     }
 
@@ -108,14 +109,17 @@ namespace Simulator.Api.Commands
                         }
                     }
 
+                    if (config.BridgeData != null)
+                    {
+                        var pluginTask = DownloadManager.GetAsset(BundleConfig.BundleTypes.Bridge, config.BridgeData.AssetGuid, config.BridgeData.Name);
+                        downloads.Add(pluginTask);
+                        assetDownloads.TryAdd(pluginTask, config.BridgeData.Type);
+                    }
+
                     foreach (var sensor in sensorsToDownload)
                     {
-                        var pluginProgress = ConnectionUI.instance != null ?
-                        new Progress<Tuple<string, float>>(p => ConnectionUI.instance.UpdateDownloadProgress(p.Item1, p.Item2))
-                        : new Progress<Tuple<string, float>>(p => Debug.Log($"Download: {p.Item1}: {p.Item2}"));
-
                         var pluginTask = DownloadManager.GetAsset(BundleConfig.BundleTypes.Sensor, sensor.Plugin.AssetGuid,
-                            sensor.Name, pluginProgress);
+                            sensor.Name);
                         downloads.Add(pluginTask);
                         assetDownloads.TryAdd(pluginTask, sensor.Type);
                     }
@@ -127,8 +131,6 @@ namespace Simulator.Api.Commands
                     }
 
                     agentGO = agents.SpawnAgent(config);
-                    agentGO.transform.position = position;
-                    agentGO.transform.rotation = Quaternion.Euler(rotation);
 
                     if (agents.ActiveAgents.Count == 1)
                     {
@@ -239,6 +241,7 @@ namespace Simulator.Api.Commands
             }
             catch (Exception e)
             {
+                Debug.LogException(e);
                 api.SendError(this, e.Message);
             }
             finally

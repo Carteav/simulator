@@ -97,7 +97,7 @@ public class PedestrianController : DistributedComponent, ITriggerAgent, IGlobal
                 return;
             CurrentSpeed = value;
             if (Loader.Instance.Network.IsMaster)
-                BroadcastSnapshot();
+                BroadcastSnapshot(true);
             if (!Loader.Instance.Network.IsClient)
                 SetAnimationControllerParameters();
         }
@@ -211,10 +211,19 @@ public class PedestrianController : DistributedComponent, ITriggerAgent, IGlobal
     public void SetGroundTruthBox()
     {
         var capsule = GetComponent<CapsuleCollider>();
-        Bounds = new Bounds(transform.position, Vector3.zero)
+        var renderer = GetComponentInChildren<SkinnedMeshRenderer>();
+
+        if (renderer == null) // create bounds from mesh or use default
         {
-            size = new Vector3(capsule.radius * 2, capsule.height, capsule.radius * 2)
-        };
+            Bounds = new Bounds(transform.position, Vector3.zero)
+            {
+                size = new Vector3(capsule.radius * 2, capsule.height, capsule.radius * 2)
+            };
+        }
+        else
+        {
+            Bounds = renderer.bounds;
+        }
 
         // GroundTruth Box Collider
         var gtBox = new GameObject("GroundTruthBox");

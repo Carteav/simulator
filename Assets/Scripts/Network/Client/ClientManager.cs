@@ -43,6 +43,16 @@ namespace Simulator.Network.Client
         private IEnumerator timeoutCoroutine;
 
         /// <summary>
+        /// Coroutine to iterate master ip adresses to try
+        /// </summary>
+        private Coroutine masterEndpointsCouroutine;
+
+        /// <summary>
+        /// Count of current connection requests to the main ip address
+        /// </summary>
+        private int connectionRequests;
+
+        /// <summary>
         /// Current state of the simulation
         /// </summary>
         private SimulationState State { get; set; } = SimulationState.Initial;
@@ -215,8 +225,9 @@ namespace Simulator.Network.Client
         /// <param name="peer">Peer that has connected</param>
         public void OnPeerConnected(IPeerManager peer)
         {
+            connectionRequests--;
             Debug.Assert(State == SimulationState.Connecting);
-            Connection.DroppedAllConnections -= TryConnectToMasterEndPoints;
+            StopCoroutine(masterEndpointsCouroutine);
             MasterPeer = peer;
 
             Log.Info($"Peer {peer.PeerEndPoint} connected.");
@@ -233,7 +244,12 @@ namespace Simulator.Network.Client
         public void OnPeerDisconnected(IPeerManager peer)
         {
             if (peer != MasterPeer)
+            {
+                Log.Info($"Could not connect to the {peer.PeerEndPoint} endpoint.");
+                connectionRequests--;
                 return;
+            }
+
             MasterPeer = null;
             Log.Info($"Peer {peer.PeerEndPoint} disconnected.");
         }
@@ -272,9 +288,8 @@ namespace Simulator.Network.Client
 
             State = SimulationState.Connecting;
             Log.Info("Client tries to connect to the master.");
-            Connection.DroppedAllConnections += TryConnectToMasterEndPoints;
             TryConnectToMasterEndPoints();
-            if (timeoutCoroutine!=null)
+            if (timeoutCoroutine != null)
                 StopCoroutine(timeoutCoroutine);
             timeoutCoroutine = CheckInitialTimeout();
             StartCoroutine(timeoutCoroutine);
@@ -285,20 +300,40 @@ namespace Simulator.Network.Client
         /// </summary>
         private void TryConnectToMasterEndPoints()
         {
-            var network = Loader.Instance.Network;
+            masterEndpointsCouroutine = StartCoroutine(IterateMasterEndpoints());
+        }
+
+        /// <summary>
+        ///  Iterates through master endpoint adresses
+        /// </summary>
+        private IEnumerator IterateMasterEndpoints()
+        {
             //Check if this simulation was not deinitialized
+            var network = Loader.Instance.Network;
             if (!network.IsClient)
-                return;
+                yield break;
             var masterEndPoints = network.MasterAddresses;
             var localEndPoints = network.LocalAddresses;
             var identifier = network.LocalIdentifier;
-            foreach (var masterEndPoint in masterEndPoints)
+            
+            //Try connecting to every endpoint multiple times if it is needed
+            for (var i = 0; i < settings.MaximumConnectionRetries; i++)
             {
-                //Check if client is already connected
-                if (MasterPeer != null)
-                    return;
-                if (!localEndPoints.Contains(masterEndPoint))
-                    Connection.Connect(masterEndPoint, identifier);
+                foreach (var masterEndPoint in masterEndPoints)
+                {
+                    if (State == SimulationState.Connected)
+                        yield break;
+                    //Check if client is already connected
+                    if (MasterPeer != null)
+                        yield break;
+                    if (!IPAddress.IsLoopback(masterEndPoint.Address))
+                    {
+                        connectionRequests++;
+                        Connection.Connect(masterEndPoint, identifier);
+                        while (connectionRequests > 0)
+                            yield return null;
+                    }
+                }
             }
         }
 
@@ -337,7 +372,7 @@ namespace Simulator.Network.Client
                 $"{GetType().Name} could not establish the connection to the master. This client ip addresses: '{localAddressesSb}', master ip addresses: '{masterAddressesSb}', current UTC time: {DateTime.UtcNow.ToString(CultureInfo.InvariantCulture)}.");
 
             //Stop the simulation
-            Loader.StopAsync();
+            Loader.Instance.StopAsync();
         }
 
         /// <summary>
@@ -381,13 +416,17 @@ namespace Simulator.Network.Client
                 return;
             Log.Info($"{GetType().Name} broadcasts the simulation stop command.");
 
-            var stopData = PacketsProcessor.Write(new Commands.Stop());
-            var message = MessagesPool.Instance.GetMessage(stopData.Length);
+            var dataWriter = new NetDataWriter();
+            PacketsProcessor.Write(dataWriter, new Commands.Stop
+            {
+                SimulationId = Loader.Instance.Network.CurrentSimulation.Id
+            });
+            var message = MessagesPool.Instance.GetMessage(dataWriter.Length);
             message.AddressKey = Key;
             message.Content.PushBytes(stopData);
             message.Type = DistributedMessageType.ReliableOrdered;
             BroadcastMessage(message);
-            
+
             State = SimulationState.Stopping;
         }
 
@@ -401,7 +440,7 @@ namespace Simulator.Network.Client
             if (State == SimulationState.Loading || State == SimulationState.Running)
                 return;
             Debug.Assert(State == SimulationState.Ready);
-            Loader.StartAsync(Loader.Instance.Network.CurrentSimulation);
+            Loader.Instance.StartAsync(Loader.Instance.Network.CurrentSimulation);
             State = SimulationState.Loading;
             Log.Info(
                 $"{GetType().Name} received run command and started the simulation. Local UTC time: {DateTime.UtcNow}, remote UTC time: {Connection.MasterPeer.RemoteUtcTime}, time difference {Connection.MasterPeer.RemoteTimeTicksDifference}.");
@@ -418,7 +457,7 @@ namespace Simulator.Network.Client
 
             Log.Info($"{GetType().Name} received stop command and stops the simulation.");
             State = SimulationState.Stopping;
-            Loader.StopAsync();
+            Loader.Instance.StopAsync();
         }
 
         /// <summary>

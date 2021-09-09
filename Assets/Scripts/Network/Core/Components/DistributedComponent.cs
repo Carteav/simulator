@@ -175,7 +175,7 @@ namespace Simulator.Network.Core.Components
             PushSnapshot(message.Content);
             message.AddressKey = Key;
             message.Type = reliableSnapshot
-                ? DistributedMessageType.ReliableUnordered
+                ? DistributedMessageType.ReliableOrdered
                 : DistributedMessageType.Unreliable;
             return message;
         }

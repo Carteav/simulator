@@ -623,7 +623,7 @@ public class UIManager : MonoBehaviour
     private void StopSimYesButtonOnClick()
     {
         StopSimPanel.SetActive(false);
-        Loader.StopAsync();
+        Loader.Instance.StopAsync();
     }
 
     private void StopSimNoButtonOnClick()
@@ -633,7 +633,7 @@ public class UIManager : MonoBehaviour
 
     private void StopButtonOnClick()
     {
-        Loader.StopAsync();
+        Loader.Instance.StopAsync();
     }
 
     public void PauseButtonOnClick()

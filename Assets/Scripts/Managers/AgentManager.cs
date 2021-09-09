@@ -8,18 +8,16 @@
 using System;
 using System.Linq;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using UnityEngine;
 using Simulator;
-using Simulator.Sensors;
 using Simulator.Utilities;
 using Simulator.Components;
 using Simulator.Network.Core;
-using Simulator.Network.Core.Components;
 using Simulator.Network.Core.Messaging;
 using Simulator.Network.Shared;
-using UnityEngine.Rendering.HighDefinition;
 using Simulator.Bridge;
+using System.IO;
+using VirtualFileSystem;
 
 public class AgentManager : MonoBehaviour
 {
@@ -61,23 +59,11 @@ public class AgentManager : MonoBehaviour
             baseLink.transform.SetParent(go.transform, false);
         }
 
-        ActiveAgents.Add(agentController.Config);
-        agentController.GTID = ++SimulatorManager.Instance.GTIDs;
-        agentController.Config.GTID = agentController.GTID;
-
-        BridgeClient bridgeClient = null;
-        if (config.Bridge != null)
+        var sensorsController = go.GetComponent<ISensorsController>() ?? go.AddComponent<SensorsController>();
+        if (controller != null)
         {
-            bridgeClient = go.AddComponent<BridgeClient>();
-            bridgeClient.Init(config.Bridge);
-
-            if (!String.IsNullOrEmpty(config.Connection))
-            {
-                bridgeClient.Connect(config.Connection);
-            }
+            controller.AgentSensorsController = sensorsController;
         }
-        var sensorsController = go.AddComponent<SensorsController>();
-        agentController.AgentSensorsController = sensorsController;
 
         //Add required components for distributing rigidbody from master to clients
         var network = Loader.Instance.Network;
@@ -105,10 +91,32 @@ public class AgentManager : MonoBehaviour
             ClusterSimulationUtilities.AddDistributedComponents(go);
         }
 
-        go.transform.position = config.Position;
-        go.transform.rotation = config.Rotation;
+        BridgeClient bridgeClient = null;
+        if (config.BridgeData != null)
+        {
+            var dir = Path.Combine(Simulator.Web.Config.PersistentDataPath, "Bridges");
+            var vfs = VfsEntry.makeRoot(dir);
+            Simulator.Web.Config.CheckDir(vfs.GetChild(config.BridgeData.AssetGuid), Simulator.Web.Config.LoadBridgePlugin);
+
+            bridgeClient = go.AddComponent<BridgeClient>();
+            config.Bridge = BridgePlugins.Get(config.BridgeData.Type);
+            bridgeClient.Init(config.Bridge);
+
+            if (!String.IsNullOrEmpty(config.Connection))
+            {
+                bridgeClient.Connect(config.Connection);
+            }
+        }
+
+        go.transform.SetPositionAndRotation(config.Position, config.Rotation);
         sensorsController.SetupSensors(config.Sensors);
-        agentController.Init();
+        
+        controller?.Init();
+
+        if (SimulatorManager.Instance.IsAPI)
+        {
+            SimulatorManager.Instance.EnvironmentEffectsManager.InitRainVFX(go.transform);
+        }
 
         go.SetActive(true);
         return go;
@@ -193,6 +201,11 @@ public class AgentManager : MonoBehaviour
 
     public void DestroyAgent(GameObject go)
     {
+        if (SimulatorManager.Instance.IsAPI)
+        {
+            SimulatorManager.Instance.EnvironmentEffectsManager.ClearRainVFX(go.transform);
+        }
+
         ActiveAgents.RemoveAll(config => config.AgentGO == go);
         Destroy(go);
 

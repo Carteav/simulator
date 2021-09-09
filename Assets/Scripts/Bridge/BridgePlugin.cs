@@ -66,6 +66,10 @@ namespace Simulator.Bridge
         }
 
         // interface implementation
+        public BridgeNameAttribute GetBridgeNameAttribute()
+        {
+            return Factory.GetType().GetCustomAttribute<BridgeNameAttribute>();
+        }
 
         public void AddType<Type>(string bridgeTypeName)
         {
@@ -126,6 +130,7 @@ namespace Simulator.Bridge
         public static void Add(IBridgeFactory factory)
         {
             var name = GetNameFromFactory(factory.GetType());
+            Debug.Log($"adding Bridge {name} from {factory.GetType().Assembly.GetName().Name} {factory.GetType().Assembly.CodeBase}");
             if (All.ContainsKey(name))
             {
                 Debug.LogWarning($"Bridge {name} already registered, ignoring duplicate(?) plugin");
@@ -147,12 +152,13 @@ namespace Simulator.Bridge
 
         public static IEnumerable<Type> GetBridgeFactories()
         {
-            return
-                from a in AppDomain.CurrentDomain.GetAssemblies()
-                where !a.IsDynamic
-                from t in GetExportedTypesSafe(a)
-                where typeof(IBridgeFactory).IsAssignableFrom(t) && !t.IsAbstract && !t.ContainsGenericParameters
-                select t;
+            List<Type> factories = new List<Type>();
+            foreach(var v in All.Values)
+            {
+                factories.Add(v.Factory.GetType());
+            }
+
+            return factories;
         }
 
         static Type[] GetExportedTypesSafe(Assembly asm)

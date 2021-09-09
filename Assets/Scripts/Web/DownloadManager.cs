@@ -11,6 +11,7 @@ using System.ComponentModel;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using UnityEngine;
+using UnityEngine.Assertions;
 using System.Linq;
 using Simulator.Database.Services;
 using Simulator.Database;
@@ -20,25 +21,27 @@ namespace Simulator.Web
 {
     public static class DownloadManager
     {
-        class Download
+        class Download : IProgressTask
         {
             public const float rateLimit = 0.5f; // in seconds
 
             public Uri uri;
             public string path;
-            public Action<int> update;
-            public Action<bool, Exception> completed;
+            public event Action<IProgressTask> OnUpdated = delegate { };
+            public event Action<IProgressTask, bool, Exception> OnCompleted = delegate { };
             public bool valid = true;
             public long ExpectedBytes = 0;
             public long BytesReceived = 0;
 
-            public Download(Uri uri, string path, Action<int> update, Action<bool, Exception> completed)
+            public Download(Uri uri, string path, string description)
             {
                 this.uri = uri;
                 this.path = path;
-                this.update = update;
-                this.completed = completed;
+                Description = description;
             }
+
+            public float Progress => ExpectedBytes > 0 ? (float)BytesReceived / ExpectedBytes : 0.0f;
+            public string Description { get; set; }
 
             public void Completed(object sender, AsyncCompletedEventArgs args)
             {
@@ -50,18 +53,19 @@ namespace Simulator.Web
                 if (ExpectedBytes != BytesReceived || ExpectedBytes <= 0)
                 {
                     if (!cancelled)
-                        completed?.Invoke(false, new Exception($"Download incomplete, received {BytesReceived} of {ExpectedBytes}"));
+                        OnCompleted(this, false, new Exception($"Download incomplete, received {BytesReceived} of {ExpectedBytes}"));
                     // TODO continue partial download with range header.
                     // needs rewrite to use WebRequest here and needs range support on WISE asset service side
                 }
                 else
                 {
-                    completed?.Invoke(args.Error == null && !args.Cancelled, args.Error);
+                    OnCompleted(this, args.Error == null && !args.Cancelled, args.Error);
                 }
                 
 
                 client.DownloadProgressChanged -= Update;
                 client.DownloadFileCompleted -= Completed;
+                OnCompleted(this, true, null);
             }
 
             public void Update(object sender, DownloadProgressChangedEventArgs args)
@@ -77,7 +81,7 @@ namespace Simulator.Web
                 if (currentProgress != args.ProgressPercentage)
                 {
                     currentProgress = args.ProgressPercentage;
-                    update?.Invoke(args.ProgressPercentage);
+                    OnUpdated(this);
                     nextUpdate = now + (long)(rateLimit * Stopwatch.Frequency);
                 }
             }
@@ -103,21 +107,25 @@ namespace Simulator.Web
             ManageDownloads();
         }
 
-        public static void AddDownloadToQueue(Uri uri, string path, Action<int> update = null, Action<bool, Exception> completed = null)
+        public static IProgressTask AddDownloadToQueue(Uri uri, string path, string description)
         {
             Init();
-            downloads.Enqueue(new Download(uri, path, update, completed));
+            var download = new Download(uri, path, description);
+            downloads.Enqueue(download);
+            return download;
         }
 
         public static Task<AssetModel> GetAsset(BundleConfig.BundleTypes type, string assetGuid, string name = null,
             IProgress<Tuple<string, float>> progressCallback = null)
         {
+            Assert.IsNotNull(assetGuid, $"{nameof(assetGuid)} must not be null when trying to get ${BundleConfig.singularOf(type)} asset.");
+
             Init();
             var assetService = new AssetService();
             var found = assetService.Get(assetGuid);
-            if(found != null)
+            if (found != null)
             {
-                if(File.Exists(found.LocalPath))
+                if (File.Exists(found.LocalPath))
                 {
                     return Task.FromResult(found);
                 }
@@ -140,13 +148,16 @@ namespace Simulator.Web
             progressCallback?.Report(new Tuple<string, float>(name, 0.0f));
             Debug.Log($"{name} Download at 0%");
             var t = new TaskCompletionSource<AssetModel>();
-            downloads.Enqueue(new Download(uri, localPath,
-            progress =>
+            var download = new Download(uri, localPath, name);
+
+            download.OnUpdated += (IProgressTask t) =>
             {
-                progressCallback?.Report(new Tuple<string, float>(name, progress));
-                Debug.Log($"{name} Download at {progress}%");
-            } ,
-            (success, ex) => {
+                progressCallback?.Report(new Tuple<string, float>(name, t.Progress * 100));
+                Debug.Log($"{name} Download at {t.Progress * 100}%");
+            };
+
+            download.OnCompleted += (IProgressTask pt, bool success, Exception ex) =>
+            {
                 if (success)
                 {
                     try
@@ -172,7 +183,10 @@ namespace Simulator.Web
                 {
                     t.TrySetException(ex);
                 }
-            }));
+            };
+
+            downloads.Enqueue(download);
+            TaskProgressManager.Instance.AddTask(download);
             return t.Task;
         }
 
@@ -206,8 +220,7 @@ namespace Simulator.Web
             initialized = true;
             while (true)
             {
-                Download download;
-                if (downloads.TryDequeue(out download) && download.valid)
+                if (downloads.TryDequeue(out Download download) && download.valid)
                 {
                     currentUrl = download.uri.OriginalString;
                     await DownloadFile(download);
@@ -232,7 +245,7 @@ namespace Simulator.Web
                 cancelled = false;
                 await client.DownloadFileTaskAsync(download.uri, download.path);
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 if (File.Exists(download.path))
                 {

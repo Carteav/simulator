@@ -89,7 +89,10 @@ pipeline {
           env.SIM_SENSORS = ""
         }
 
-        sh label:"SIMULATOR env vars", script:"printenv | grep -E 'SIMULATOR|^SIM_' | sort"
+          // Disable build-in sensors
+          SIM_SENSORS = ""
+          SIM_BRIDGES = ""
+        }
       }
     }
 

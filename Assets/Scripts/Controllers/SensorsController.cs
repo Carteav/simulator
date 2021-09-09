@@ -161,11 +161,29 @@ public class SensorsController : MonoBehaviour, IMessageSender, IMessageReceiver
                 var item = requested[i];
                 string parentName = item.Parent != null ? item.Parent : string.Empty;
 
-                    var parentObject = parents.ContainsKey(parentName) ? parents[parentName] : gameObject;
-                    var name = item.Name;
-                    var type = item.Type;
-                    GameObject prefab = null;
-                    if (item.Plugin.AssetGuid == null)
+                var parentObject = parents[parentName];
+                var name = item.Name;
+                var type = item.Type;
+                GameObject prefab = null;
+                if (item.Plugin.AssetGuid == null)
+                {
+                    Debug.LogWarning($"sensor without assetguid: {item.Name} {item.Type}");
+                    prefab = Config.SensorPrefabs.FirstOrDefault(s => GetSensorType(s) == type)?.gameObject;
+                    if (prefab == null)
+                    {
+                        Debug.LogError($"could not find alternative for {item.Name} {item.Type}");
+                    }
+                }
+                else if (Config.SensorTypeLookup.ContainsKey(item.Plugin.AssetGuid))
+                {
+                    prefab = Config.SensorTypeLookup[item.Plugin.AssetGuid]?.gameObject;
+                }
+                else
+                {
+                    var dir = Path.Combine(Config.PersistentDataPath, "Sensors");
+                    var vfs = VfsEntry.makeRoot(dir);
+                    Config.CheckDir(vfs.GetChild(item.Plugin.AssetGuid), Config.LoadSensorPlugin);
+                    if (Config.SensorTypeLookup.ContainsKey(item.Plugin.AssetGuid))
                     {
                         prefab = Config.SensorPrefabs.FirstOrDefault(s => GetSensorType(s) == type).gameObject;
                     }

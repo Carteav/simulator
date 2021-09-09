@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.Formats.Fbx.Exporter;
@@ -218,6 +219,16 @@ namespace Simulator.Editor
                         var fmu = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile).GetComponent<VehicleFMU>();
                         var baseLink = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile).GetComponent<BaseLink>();
 
+                        var controller = vehiclePrefab.GetComponent<IAgentController>();
+                        if (controller == null)
+                        {
+                            throw new Exception($"Build failed: IAgentController implementation on {prefabEntry.mainAssetFile} not found. Please add a component implementing IAgentController and rebuild.");
+                        }
+
+                        var info = vehiclePrefab.GetComponent<VehicleInfo>();
+                        var fmu = vehiclePrefab.GetComponent<VehicleFMU>();
+                        var baseLink = vehiclePrefab.GetComponentInChildren<BaseLink>();
+
                         if (info == null)
                         {
                             throw new Exception($"Build failed: Vehicle info on {prefabEntry.mainAssetFile} not found. Please add a VehicleInfo component and rebuild.");
@@ -265,27 +276,19 @@ namespace Simulator.Editor
                         var textures = new BundlePreviewRenderer.PreviewTextures();
                         BundlePreviewRenderer.RenderVehiclePreview(prefabEntry.mainAssetFile, textures);
                         var bytesLarge = textures.large.EncodeToPNG();
-                        var bytesMedium = textures.medium.EncodeToPNG();
-                        var bytesSmall = textures.small.EncodeToPNG();
                         textures.Release();
 
                         string tmpdir = Path.Combine(outputFolder, $"{manifest.assetName}_pictures");
                         Directory.CreateDirectory(tmpdir);
-                        File.WriteAllBytes(Path.Combine(tmpdir, "small.png"), bytesSmall);
-                        File.WriteAllBytes(Path.Combine(tmpdir, "medium.png"), bytesMedium);
-                        File.WriteAllBytes(Path.Combine(tmpdir, "large.png"), bytesLarge);
+                        File.WriteAllBytes(Path.Combine(tmpdir, "preview-1.png"), bytesLarge);
 
-                        var images = new Images()
+                        var images = new string[]
                         {
-                            small = ZipPath("images", "small.png"),
-                            medium = ZipPath("images", "medium.png"),
-                            large = ZipPath("images", "large.png"),
+                            ZipPath("images", "preview-1.png"),
                         };
                         manifest.attachments.Add("images", images);
 
-                        buildArtifacts.Add((Path.Combine(tmpdir, "small.png"), images.small));
-                        buildArtifacts.Add((Path.Combine(tmpdir, "medium.png"), images.medium));
-                        buildArtifacts.Add((Path.Combine(tmpdir, "large.png"), images.large));
+                        buildArtifacts.Add((Path.Combine(tmpdir, "preview-1.png"), images[0]));
                         buildArtifacts.Add((tmpdir, null));
                     }
                 }
@@ -427,26 +430,18 @@ namespace Simulator.Editor
                             var textures = new BundlePreviewRenderer.PreviewTextures();
                             BundlePreviewRenderer.RenderScenePreview(previewOrigin, textures);
                             var bytesLarge = textures.large.EncodeToPNG();
-                            var bytesMedium = textures.medium.EncodeToPNG();
-                            var bytesSmall = textures.small.EncodeToPNG();
                             textures.Release();
 
                             tmpdir = Path.Combine(outputFolder, $"{name}_pictures");
                             Directory.CreateDirectory(tmpdir);
-                            File.WriteAllBytes(Path.Combine(tmpdir, "small.png"), bytesSmall);
-                            File.WriteAllBytes(Path.Combine(tmpdir, "medium.png"), bytesMedium);
-                            File.WriteAllBytes(Path.Combine(tmpdir, "large.png"), bytesLarge);
+                            File.WriteAllBytes(Path.Combine(tmpdir, "preview-1.png"), bytesLarge);
 
-                            var images = new Images()
+                            var images = new string[]
                             {
-                                small = ZipPath("images", "small.png"),
-                                medium = ZipPath("images", "medium.png"),
-                                large = ZipPath("images", "large.png"),
+                                ZipPath("images", "preview-1.png"),
                             };
                             manifest.attachments.Add("images", images);
-                            buildArtifacts.Add((Path.Combine(tmpdir, "small.png"), images.small));
-                            buildArtifacts.Add((Path.Combine(tmpdir, "medium.png"), images.medium));
-                            buildArtifacts.Add((Path.Combine(tmpdir, "large.png"), images.large));
+                            buildArtifacts.Add((Path.Combine(tmpdir, "preview-1.png"), images[0]));
                             buildArtifacts.Add((tmpdir, null));
 
                             foreach (Tuple<string, string> t in loaderPaths)
@@ -733,6 +728,14 @@ namespace Simulator.Editor
                                     }
                                     asset = null;
                                 }
+
+                                manifest.supportedBridgeTypes = sensor.SupportedBridgeTypes.ToArray();
+
+                                if(sensor.SupportedBridgeTypes.Count == 0)
+                                {
+                                    Debug.LogWarning($"{manifest.assetName} has no enumerated supported bridge types. Please make sure you list your supported bridge types.");
+                                }
+
                                 EditorUtility.UnloadUnusedAssetsImmediate();
                             }
 
@@ -741,6 +744,25 @@ namespace Simulator.Editor
                                 // gather information about bridge plugin
 
                                 IBridgeFactory bridgeFactory = null;
+
+                                System.Reflection.Assembly bridgesAssembly = null;
+                                if (File.Exists(Path.Combine(BundleConfig.ExternalBase, "Bridges", entry.name, $"{manifest.assetName}.cs")))
+                                {
+                                    if (bridgesAssembly == null)
+                                    {
+                                        bridgesAssembly = System.Reflection.Assembly.Load("Simulator.Bridges");
+                                    }
+
+                                    foreach (Type ty in bridgesAssembly.GetTypes())
+                                    {
+                                        if (typeof(IBridgeFactory).IsAssignableFrom(ty) && !ty.IsAbstract)
+                                        {
+                                            bridgeFactory = Activator.CreateInstance(ty) as IBridgeFactory;
+                                            BridgePlugins.Add(bridgeFactory);
+                                        }
+                                    }
+                                }
+
                                 foreach (var factoryType in BridgePlugins.GetBridgeFactories())
                                 {
                                     if (BridgePlugins.GetNameFromFactory(factoryType) == entry.name)
@@ -749,13 +771,13 @@ namespace Simulator.Editor
                                         break;
                                     }
                                 }
-                                if (bridgeFactory == null)
-                                {
+                                if (bridgeFactory == null) { 
                                     throw new Exception($"Cannot find IBridgeFactory for {entry.name} bridge plugin");
                                 }
 
                                 var plugin = new BridgePlugin(bridgeFactory);
                                 manifest.bridgeDataTypes = plugin.GetSupportedDataTypes();
+                                manifest.bridgeType = bridgeFactory.GetType().GetCustomAttribute<BridgeNameAttribute>().Type;
                             }
 
                             var manifestOutput = Path.Combine(outputFolder, "manifest.json");
@@ -1114,10 +1136,22 @@ namespace Simulator.Editor
         private static void Run()
         {
             var hasQuitArg = Environment.GetCommandLineArgs().Contains("-quit");
-            RunImpl(!hasQuitArg);
+
+            try {
+                RunImpl();
+            }
+            catch (Exception e) {
+                Debug.LogError(e);
+            }
+            finally {
+                if (!hasQuitArg)
+                {
+                    EditorApplication.Exit(0);
+                }
+            }
         }
 
-        private static void RunImpl(bool forceExit = false)
+        private static void RunImpl()
         {
             BuildTarget? buildTarget = null;
 
@@ -1247,10 +1281,6 @@ namespace Simulator.Editor
             finally
             {
                 Running = false;
-                if (forceExit)
-                {
-                    EditorApplication.Exit(0);
-                }
             }
         }
 

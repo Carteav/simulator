@@ -317,7 +317,7 @@ namespace Simulator.Network.Master
             if (Loader.Instance.CurrentSimulation != null && State != SimulationState.Initial)
             {
                 Log.Warning("Stopping current cluster simulation as one connection with client has been lost.");
-                Loader.StopAsync();
+                Loader.Instance.StopAsync();
             }
 
             State = SimulationState.Initial;
@@ -413,7 +413,9 @@ namespace Simulator.Network.Master
         {
             if (Loader.Instance.CurrentSimulation == null || State == SimulationState.Initial) return;
             Log.Info($"{GetType().Name} received stop command and stops the simulation.");
-            Loader.StopAsync();
+            BroadcastStopCommand();
+            State = SimulationState.Stopping;
+            Loader.Instance.StopAsync();
         }
 
         /// <summary>
@@ -430,7 +432,7 @@ namespace Simulator.Network.Master
             message.Type = DistributedMessageType.ReliableOrdered;
             BroadcastMessage(message);
 
-            Loader.StartAsync(Loader.Instance.Network.CurrentSimulation);
+            Loader.Instance.StartAsync(Loader.Instance.Network.CurrentSimulation);
             foreach (var clientConnection in clients)
                 clientConnection.State = SimulationState.Loading;
             State = SimulationState.Loading;

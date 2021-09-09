@@ -81,11 +81,18 @@ namespace Simulator.Web
         {
             Root = Path.Combine(Application.dataPath, "..");
             PersistentDataPath = Application.persistentDataPath;
+            PersistentDataPath += "-" + CloudAPI.GetInfo().version;
 
             ParseConfigFile();
             if (!Application.isEditor)
             {
                 ParseCommandLine();
+            }
+
+            CreatePersistentPath();
+
+            if (!Application.isEditor)
+            {
                 CreateLockFile();
             }
 
@@ -235,6 +242,7 @@ namespace Simulator.Web
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var dir = Path.Combine(Application.dataPath, "..", "AssetBundles");
+            Debug.Log("Pre-loading Assetbundles from root path "+dir);
             var vfs = VfsEntry.makeRoot(dir);
 
             // descend into each known dir looking for only specific asset types. todo: add asset type to manifest?
@@ -258,8 +266,30 @@ namespace Simulator.Web
             return Assembly.Load(buffer);
         }
 
+
         public static void LoadBridgePlugin(Manifest manifest, VfsEntry dir)
         {
+#if UNITY_EDITOR
+            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true)
+            {
+                Assembly bridgesAssembly = null;
+                if (File.Exists(Path.Combine(BundleConfig.ExternalBase, "Bridges", manifest.assetName, $"{manifest.assetName}.cs")))
+                {
+                    if (bridgesAssembly == null) bridgesAssembly = Assembly.Load("Simulator.Bridges");
+                    foreach (Type ty in bridgesAssembly.GetTypes())
+                    {
+                        if (typeof(IBridgeFactory).IsAssignableFrom(ty) && !ty.IsAbstract && ty.GetCustomAttribute<BridgeNameAttribute>().Name == manifest.bridgeType)
+                        {
+                            Debug.LogWarning($"Loading {manifest.bridgeType} ({manifest.assetGuid}) in Developer Debug Mode. If you wish to use this bridge plugin from WISE, disable Developer Debug Mode in Simulator->Developer Debug Mode or remove the bridge from Assets/External/Bridges");
+                            var bridgeFactory = Activator.CreateInstance(ty) as IBridgeFactory;
+                            BridgePlugins.Add(bridgeFactory);
+                        }
+                    }
+                    return;
+                }
+            }
+#endif
+
             if (manifest.assetFormat != BundleConfig.Versions[BundleConfig.BundleTypes.Bridge])
             {
                 throw new Exception($"Manifest version mismatch, expected {BundleConfig.Versions[BundleConfig.BundleTypes.Bridge]}, got {manifest.assetFormat}");
@@ -268,7 +298,8 @@ namespace Simulator.Web
             var pluginSource = LoadAssembly(dir, $"{manifest.assetName}.dll");
             foreach (Type ty in pluginSource.GetTypes())
             {
-                if (typeof(IBridgeFactory).IsAssignableFrom(ty))
+
+                if (typeof(IBridgeFactory).IsAssignableFrom(ty) && !ty.IsAbstract)
                 {
                     var bridgeFactory = Activator.CreateInstance(ty) as IBridgeFactory;
                     BridgePlugins.Add(bridgeFactory);
@@ -279,13 +310,17 @@ namespace Simulator.Web
         public static void LoadSensorPlugin(Manifest manifest, VfsEntry dir)
         {
 #if UNITY_EDITOR
-            //if (SensorDebugModeEnabled == true) // TODO Why is this not working?
-            if (EditorPrefs.GetBool("Simulator/Sensor Debug Mode", false) == true)
+            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true)
             {
                 if (File.Exists(Path.Combine(BundleConfig.ExternalBase, "Sensors", manifest.assetName, $"{manifest.assetName}.prefab")))
                 {
-                    Debug.Log($"Loading {manifest.assetName} in Sensor Debug Mode. If you wish to use this sensor plugin from WISE, disable Sensor Debug Mode in Simulator->Sensor Debug Mode or remove the sensor from Assets/External/Sensors");
-                    var prefab = (GameObject)AssetDatabase.LoadAssetAtPath(Path.Combine(BundleConfig.ExternalBase, "Sensors", manifest.assetName, $"{manifest.assetName}.prefab"), typeof(GameObject));
+                    Debug.LogWarning($"Loading {manifest.assetName} ({manifest.assetGuid}) in Developer Debug Mode. If you wish to use this sensor plugin from WISE, disable Developer Debug Mode in Simulator->Developer Debug Mode or remove the sensor from Assets/External/Sensors");
+                    var path = Path.Combine(BundleConfig.ExternalBase, "Sensors", manifest.assetName, $"{manifest.assetName}.prefab");
+                    var prefab = (GameObject)AssetDatabase.LoadAssetAtPath(path, typeof(GameObject));
+                    if (prefab == null)
+                    {
+                        Debug.LogWarning("prefab is null for " + path);
+                    }
                     SensorPrefabs.Add(prefab.GetComponent<SensorBase>());
                     Sensors.Add(SensorTypes.GetConfig(prefab.GetComponent<SensorBase>()));
                     if (!SensorTypeLookup.ContainsKey(manifest.assetGuid))
@@ -325,7 +360,7 @@ namespace Simulator.Web
             Assembly pluginSource = LoadAssembly(dir, $"{manifest.assetName}.dll");
             foreach (Type ty in pluginSource.GetTypes())
             {
-                if (typeof(ISensorBridgePlugin).IsAssignableFrom(ty))
+                if (typeof(ISensorBridgePlugin).IsAssignableFrom(ty) && !ty.IsAbstract)
                 {
                     var sensorBridgePlugin = Activator.CreateInstance(ty) as ISensorBridgePlugin;
                     foreach (var kv in BridgePlugins.All)
@@ -445,7 +480,7 @@ namespace Simulator.Web
                 AssetBundle pluginBundle = AssetBundle.LoadFromStream(pluginEntry.SeekableStream());
                 var pluginAssets = pluginBundle.GetAllAssetNames();
                 var prefabName = $"{manifest.assetName}.prefab";
-                var mainPrefabName = 
+                var mainPrefabName =
                     pluginAssets.First(name => name.IndexOf(prefabName, StringComparison.InvariantCultureIgnoreCase) >= 0);
                 GameObject prefab = pluginBundle.LoadAsset<GameObject>(mainPrefabName);
 
@@ -472,7 +507,7 @@ namespace Simulator.Web
 
             if (pluginEntry == null && pluginSource == null)
             {
-                Debug.LogError("Neither assembly nor prefab found in "+manifest.assetName);
+                Debug.LogWarning("Neither assembly nor prefab found in " + manifest.assetName);
             }
 
             if (textureBundle && !AssetBundle.GetAllLoadedAssetBundles().Contains(textureBundle))
@@ -539,7 +574,7 @@ namespace Simulator.Web
 
             PersistentDataPath = config.data_path;
 
-            CloudUrl = config.cloud_url;
+            CloudUrl = config.cloud_url.TrimEnd('/');
             string cloudUrl = Environment.GetEnvironmentVariable("SIMULATOR_CLOUDURL");
             if (!string.IsNullOrEmpty(cloudUrl))
             {
@@ -595,7 +630,7 @@ namespace Simulator.Web
                         break;
                     case "--data":
                     case "-d":
-                        if(i == args.Length - 1)
+                        if (i == args.Length - 1)
                         {
                             Debug.LogError("No value for data path provided!");
                             Application.Quit(1);
@@ -610,6 +645,26 @@ namespace Simulator.Web
                         // skip unknown arguments to allow to pass default Unity Player args
                         Debug.LogWarning($"Unknown argument {args[i]}, skipping it");
                         break;
+                }
+            }
+        }
+
+        static void CreatePersistentPath()
+        {
+            if (!Directory.Exists(PersistentDataPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(PersistentDataPath);
+                }
+                catch
+                {
+                    Debug.LogError($"Cannot create directory at {PersistentDataPath}");
+#if UNITY_EDITOR
+                    UnityEditor.EditorApplication.isPlaying = false;
+#else
+                    Application.Quit(1);
+#endif
                 }
             }
         }

@@ -26,8 +26,11 @@ namespace Simulator.Sensors
             UltraHighLoad = 3
         }
 
+        protected bool isInitialized;
         public List<AnalysisReportItem> SensorAnalysisData;
         public string Name;
+
+        public virtual List<string> SupportedBridgeTypes => new List<string>() { };
 
         [SensorParameter]
         public string Topic;

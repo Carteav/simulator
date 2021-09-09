@@ -40,13 +40,14 @@ namespace Simulator
         public GameObject Prefab;
         [NonSerialized]
         public GameObject AgentGO;
+        public BridgeData BridgeData;
         public BridgePlugin Bridge;
         public string Connection;
         public SensorData[] Sensors;
         public Vector3 Position;
         public Quaternion Rotation;
-        public AgentConfig(){}
-        public AgentConfig(VehicleData vehicleData)
+        public AgentConfig() { }
+        public AgentConfig(VehicleData vehicleData) // TODO refactor this
         {
             Name = vehicleData.Name;
             Connection = vehicleData.Bridge != null ? vehicleData.Bridge.ConnectionString : "";
@@ -63,20 +64,13 @@ namespace Simulator
                 AssetBundle = Web.WebUtilities.GenerateLocalPath(vehicleData.AssetGuid, BundleConfig.BundleTypes.Vehicle);
             }
             Sensors = vehicleData.Sensors;
-            
-            //Load sensors from the configuration if no sensors are set
-            if ((Sensors == null || Sensors.Length == 0) && 
-                vehicleData.SensorsConfigurations!=null && vehicleData.SensorsConfigurations.Length>0)
-                Sensors = vehicleData.SensorsConfigurations[0].Sensors;
-            
 
-            if (vehicleData.Bridge != null && !string.IsNullOrEmpty(vehicleData.Bridge.Type))
+            BridgeData = vehicleData.Bridge;
+
+            //Load sensors from the configuration if no sensors are set
+            if ((Sensors == null || Sensors.Length == 0) && vehicleData.SensorsConfigurations != null && vehicleData.SensorsConfigurations.Length > 0)
             {
-                Bridge = BridgePlugins.Get(vehicleData.Bridge.Type);
-                if (Bridge == null)
-                {
-                    throw new Exception($"Bridge {vehicleData.Bridge.Type} not found");
-                }
+                Sensors = vehicleData.SensorsConfigurations[0].Sensors;
             }
         }
     }
@@ -199,6 +193,7 @@ namespace Simulator
 
         public void reportStatus(SimulatorStatus value, string message = "")
         {
+            Debug.Log($"loader status: {status}->{value} {message}");
             Console.WriteLine($"[LOADER] Update simulation status {status} -> {value}");
 
             var previous = reportedStatus(status);
@@ -214,7 +209,9 @@ namespace Simulator
             if (previous == newStatus)
                 return;
 
-            if (ConnectionManager.instance != null)
+            if (ConnectionManager.instance != null &&
+                ConnectionManager.Status != ConnectionManager.ConnectionStatus.Offline &&
+                CurrentSimulation != null)
             {
                 ConnectionManager.instance.UpdateStatus(newStatus, CurrentSimulation.Id, message);
             }
@@ -298,12 +295,12 @@ namespace Simulator
             }
         }
 
-        public static async void StartSimulation(SimulationData simData)
+        public async void StartSimulation(SimulationData simData)
         {
             CloudAPI api = null;
             if (Instance.Status != SimulatorStatus.Idle)
             {
-                Debug.LogWarning("Received start simulation command while Simulator is not idle.");
+                Debug.LogWarning($"Received start simulation command while Simulator is not idle. (status: {Instance.Status})");
                 return;
             }
             try
@@ -312,33 +309,51 @@ namespace Simulator
                 // downloads still need simulator to be online, but in developer mode we don't have ConnectionManager
                 if (ConnectionManager.instance == null)
                 {
-                    api = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID);
+                    if (string.IsNullOrEmpty(Config.CloudProxy))
+                    {
+                        API = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID);
+                    }
+                    else
+                    {
+                        API = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID, new Uri(Config.CloudProxy));
+                    }
+
                     var simInfo = CloudAPI.GetInfo();
                     var reader = await api.Connect(simInfo);
                     await api.EnsureConnectSuccess();
                 }
 #endif
-                Instance.currentSimulation = simData;
-                Instance.reportStatus(SimulatorStatus.Loading);
-                Instance.Network.Initialize(Config.SimID, simData.Cluster, Instance.NetworkSettings);
+                currentSimulation = simData;
+                reportStatus(SimulatorStatus.Loading);
+                Network.Initialize(Config.SimID, simData.Cluster, NetworkSettings);
 
                 var downloads = new List<Task>();
                 if (simData.ApiOnly == false)
                 {
                     if (simData.Map != null)
                     {
-                        var progressUpdate = new Progress<Tuple<string,float>> (p => { ConnectionUI.instance.UpdateDownloadProgress(p.Item1, p.Item2); });
-                        var task = DownloadManager.GetAsset(BundleConfig.BundleTypes.Environment, simData.Map.AssetGuid, simData.Map.Name, progressUpdate);
+                        var task = DownloadManager.GetAsset(BundleConfig.BundleTypes.Environment, simData.Map.AssetGuid, simData.Map.Name);
                         downloads.Add(task);
-                        Instance.assetDownloads.TryAdd(task, simData.Map.AssetGuid);
+                        assetDownloads.TryAdd(task, simData.Map.AssetGuid);
                     }
 
                     foreach (var vehicle in simData.Vehicles.Where(v => !v.Id.EndsWith(".prefab")).Select(v => v.AssetGuid).Distinct())
                     {
-                        var progressUpdate = new Progress<Tuple<string,float>> (p => { ConnectionUI.instance.UpdateDownloadProgress(p.Item1, p.Item2); });
-                        var task = DownloadManager.GetAsset(BundleConfig.BundleTypes.Vehicle, vehicle, simData.Vehicles.First(v => v.AssetGuid == vehicle).Name, progressUpdate);
+                        var task = DownloadManager.GetAsset(BundleConfig.BundleTypes.Vehicle, vehicle, simData.Vehicles.First(v => v.AssetGuid == vehicle).Name);
                         downloads.Add(task);
-                        Instance.assetDownloads.TryAdd(task, vehicle);
+                        assetDownloads.TryAdd(task, vehicle);
+                    }
+
+                    List<string> bridgeGUIDs = new List<string>();
+                    foreach (var vehicle in simData.Vehicles)
+                    {
+                        if (vehicle.Bridge != null && !bridgeGUIDs.Contains(vehicle.Bridge.AssetGuid))
+                        {
+                            bridgeGUIDs.Add(vehicle.Bridge.AssetGuid);
+                            var task = DownloadManager.GetAsset(BundleConfig.BundleTypes.Bridge, vehicle.Bridge.AssetGuid, vehicle.Bridge.Name);
+                            downloads.Add(task);
+                            assetDownloads.TryAdd(task, vehicle.Bridge.AssetGuid);
+                        }
                     }
 
                     List<SensorData> sensorsToDownload = new List<SensorData>();
@@ -355,14 +370,9 @@ namespace Simulator
 
                     foreach(var sensor in sensorsToDownload)
                     {
-                        var pluginProgress = ConnectionUI.instance != null ?
-                            new Progress<Tuple<string, float>>(p => ConnectionUI.instance.UpdateDownloadProgress(p.Item1, p.Item2))
-                            : new Progress<Tuple<string, float>>(p => Debug.Log($"Download: {p.Item1}: {p.Item2}"));
-
-                        var pluginTask = DownloadManager.GetAsset(BundleConfig.BundleTypes.Sensor, sensor.Plugin.AssetGuid,
-                            sensor.Name, pluginProgress);
+                        var pluginTask = DownloadManager.GetAsset(BundleConfig.BundleTypes.Sensor, sensor.Plugin.AssetGuid, sensor.Name);
                         downloads.Add(pluginTask);
-                        Instance.assetDownloads.TryAdd(pluginTask, sensor.Type);
+                        assetDownloads.TryAdd(pluginTask, sensor.Plugin.AssetGuid);
                     }
                 }
 
@@ -375,13 +385,23 @@ namespace Simulator
                 await Task.WhenAll(downloads);
                 foreach (var download in downloads)
                 {
-                    Instance.assetDownloads.TryRemove(download, out _);
+                    assetDownloads.TryRemove(download, out _);
                 }
 
                 if (simData.Vehicles != null)
                 {
                     foreach (var vehicle in simData.Vehicles)
                     {
+                        if (vehicle.Bridge != null)
+                        {
+                            if (vehicle.Bridge.AssetGuid != null)
+                            {
+                                var dir = Path.Combine(Config.PersistentDataPath, "Bridges");
+                                var vfs = VfsEntry.makeRoot(dir);
+                                Config.CheckDir(vfs.GetChild(vehicle.Bridge.AssetGuid), Config.LoadBridgePlugin);
+                            }
+                        }
+
                         foreach (var sensor in vehicle.Sensors)
                         {
                             if (sensor.Plugin.AssetGuid != null) // TODO remove after WISE update
@@ -402,26 +422,26 @@ namespace Simulator
 
                 Debug.Log("All Downloads Complete");
 
-                if (!Instance.Network.IsClusterSimulation)
+                if (!Network.IsClusterSimulation)
                 {
                     StartAsync(simData);
                 }
                 else
                 {
-                    Instance.Network.SetSimulationData(simData);
+                    Network.SetSimulationData(simData);
                 }
             }
             catch (Exception ex)
             {
                 Debug.Log($"Failed to start '{simData.Name}' simulation");
                 Debug.LogException(ex);
-                Instance.reportStatus(SimulatorStatus.Error, ex.Message);
+                reportStatus(SimulatorStatus.Error, ex.Message);
 
                 if (SceneManager.GetActiveScene().name != Instance.LoaderScene)
                 {
-                    Instance.reportStatus(SimulatorStatus.Stopping);
+                    reportStatus(SimulatorStatus.Stopping);
                     SceneManager.LoadScene(Instance.LoaderScene);
-                    Instance.reportStatus(SimulatorStatus.Idle);
+                    reportStatus(SimulatorStatus.Idle);
                 }
             }
 #if UNITY_EDITOR
@@ -435,13 +455,13 @@ namespace Simulator
 #endif
         }
 
-        public static void StartAsync(SimulationData simulation)
+        public void StartAsync(SimulationData simulation)
         {
-            Debug.Assert(Instance.Status == SimulatorStatus.Loading);
-            Instance.currentSimulation = simulation;
-            Instance.reportStatus(SimulatorStatus.Starting);
+            Debug.Assert(Status == SimulatorStatus.Loading);
+            currentSimulation = simulation;
+            reportStatus(SimulatorStatus.Starting);
 
-            Instance.Actions.Enqueue(async () =>
+            Actions.Enqueue(async () =>
             {
                 try
                 {
@@ -450,20 +470,20 @@ namespace Simulator
                         throw new Exception("Simulator is configured to run in headless mode, only headless simulations are allowed");
                     }
 
-                    if (Instance.ConnectionUI != null)
+                    if (ConnectionUI != null)
                     {
-                        Instance.ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.PROGRESS);
+                        ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.PROGRESS);
                     }
 
-                    Instance.SimConfig = new SimulationConfig(simulation);
+                    SimConfig = new SimulationConfig(simulation);
 
                     // load environment
-                    if (Instance.SimConfig.ApiOnly)
+                    if (SimConfig.ApiOnly)
                     {
-                        var api = Instantiate(Instance.ApiManagerPrefab);
-                        api.name = "ApiManager";
+                        var API = Instantiate(ApiManagerPrefab);
+                        API.name = "ApiManager";
 
-                        Instance.ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.READY);
+                        ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.READY);
 
                         // Spawn external test case process
                         RunTestCase(simulation.Template);
@@ -472,8 +492,8 @@ namespace Simulator
                     {
                         var callback = new Action<bool, string, string>((isDone, sceneName, mapBundlePath) =>
                         {
-                            Instance.SimConfig.MapName = sceneName;
-                            Instance.SimConfig.MapAssetGuid = simulation.Map.AssetGuid;
+                            SimConfig.MapName = sceneName;
+                            SimConfig.MapAssetGuid = simulation.Map.AssetGuid;
                             if (!isDone) return;
                             var loaders = FindObjectsOfType<NodeTreeLoader>();
                             foreach (var l in loaders)
@@ -493,75 +513,75 @@ namespace Simulator
                     Debug.Log($"Failed to start '{simulation.Name}' simulation");
                     Debug.LogException(ex);
 
-                    Instance.reportStatus(SimulatorStatus.Error, ex.Message);
+                    reportStatus(SimulatorStatus.Error, ex.Message);
 
-                    if (SceneManager.GetActiveScene().name != Instance.LoaderScene)
+                    if (SceneManager.GetActiveScene().name != LoaderScene)
                     {
-                        Instance.reportStatus(SimulatorStatus.Stopping);
-                        SceneManager.LoadScene(Instance.LoaderScene);
-                        Instance.reportStatus(SimulatorStatus.Idle);
+                        reportStatus(SimulatorStatus.Stopping);
+                        SceneManager.LoadScene(LoaderScene);
+                        reportStatus(SimulatorStatus.Idle);
                     }
 
                     AssetBundle.UnloadAllAssetBundles(true);
-                    await Instance.Network.Deinitialize();
+                    await Network.Deinitialize();
                 }
                 catch (Exception ex)
                 {
                     Debug.Log($"Failed to start '{simulation.Name}' simulation");
                     Debug.LogException(ex);
 
-                    Instance.reportStatus(SimulatorStatus.Error, ex.Message);
+                    reportStatus(SimulatorStatus.Error, ex.Message);
 
-                    if (SceneManager.GetActiveScene().name != Instance.LoaderScene && ConnectionManager.Status != ConnectionManager.ConnectionStatus.Offline)
+                    if (SceneManager.GetActiveScene().name != LoaderScene)
                     {
-                        Instance.reportStatus(SimulatorStatus.Stopping);
-                        SceneManager.LoadScene(Instance.LoaderScene);
+                        reportStatus(SimulatorStatus.Stopping);
+                        SceneManager.LoadScene(LoaderScene);
                     }
 
-                    Instance.reportStatus(SimulatorStatus.Idle);
-                    await Instance.Network.Deinitialize();
+                    reportStatus(SimulatorStatus.Idle);
+                    await Network.Deinitialize();
                 }
             });
         }
 
-        public static void StopAsync()
+        public void StopAsync()
         {
-            if (Instance.Status == SimulatorStatus.Stopping)
+            if (Status == SimulatorStatus.Stopping ||
+                Status == SimulatorStatus.Idle)
             {
                 return;
             }
+            reportStatus(SimulatorStatus.Stopping);
 
-            if (Instance.Sentry != null)
+            if (Sentry != null)
             {
-                Instance.Sentry.Reset();
+                Sentry.Reset();
             }
 
-            Instance.Actions.Enqueue(async () =>
+            Actions.Enqueue(async () =>
             {
                 //Check if simulation scene was initialized
-                if (Instance.Status == SimulatorStatus.Loading)
+                if (Status == SimulatorStatus.Loading)
                 {
-                    foreach (var download in Instance.assetDownloads)
+                    foreach (var download in assetDownloads)
                     {
                         if (!download.Key.IsCompleted)
                         {
                             DownloadManager.StopAssetDownload(download.Value);
                         }
                     }
-                    
-                    Instance.assetDownloads.Clear();
-                    Instance.reportStatus(SimulatorStatus.Stopping);
-                    await Instance.Network.Deinitialize();
-                    Instance.ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.START);
-                    Instance.reportStatus(SimulatorStatus.Idle);
-                    Instance.ConnectionUI.UpdateStatus();
+
+                    assetDownloads.Clear();
+                    await Network.Deinitialize();
+                    ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.START);
+                    reportStatus(SimulatorStatus.Idle);
+                    ConnectionUI.UpdateStatus();
                     return;
                 }
 
                 if (ConnectionManager.Status != ConnectionManager.ConnectionStatus.Offline)
                 {
-                    Instance.Network?.BroadcastStopCommand();
-                    Instance.reportStatus(SimulatorStatus.Stopping);
+                    Network?.BroadcastStopCommand();
                 }
 
                 if (SimulatorManager.InstanceAvailable)
@@ -576,14 +596,14 @@ namespace Simulator
                     }
                 }
 
-                await Instance.Network.Deinitialize();
+                await Network.Deinitialize();
 
-                if (Instance.TCManager)
+                if (TCManager)
                 {
                     Debug.Log("[LOADER] StopAsync: Terminating process");
                     // Don't bother to stop simulation on process exit
-                    Instance.TCManager.OnFinished -= Instance.StopSimulationOnTestCaseExit;
-                    Instance.TCManager.Terminate();
+                    TCManager.OnFinished -= Instance.StopSimulationOnTestCaseExit;
+                    TCManager.Terminate();
                 }
 
                 using (var db = DatabaseManager.Open())
@@ -595,29 +615,29 @@ namespace Simulator
                             SceneManager.MoveGameObjectToScene(ApiManager.Instance.gameObject, SceneManager.GetActiveScene());
                         }
 
-                        var loader = SceneManager.LoadSceneAsync(Instance.LoaderScene);
+                        var loader = SceneManager.LoadSceneAsync(LoaderScene);
                         loader.completed += op =>
                         {
                             if (op.isDone)
                             {
                                 AssetBundle.UnloadAllAssetBundles(false);
-                                Instance.ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.START);
+                                ConnectionUI.SetLoaderUIState(ConnectionUI.LoaderUIStateType.START);
 
-                                if (Instance.Status == SimulatorStatus.Stopping)
+                                if (Status == SimulatorStatus.Stopping)
                                 {
-                                    Instance.reportStatus(SimulatorStatus.Idle);
+                                    reportStatus(SimulatorStatus.Idle);
                                 }
                             }
                         };
                     }
                     catch (Exception ex)
                     {
-                        Debug.Log($"Failed to stop '{Instance.CurrentSimulation.Name}' simulation");
+                        Debug.Log($"Failed to stop '{CurrentSimulation.Name}' simulation");
                         Debug.LogException(ex);
 
-                        if (Instance.Status == SimulatorStatus.Stopping)
+                        if (Status == SimulatorStatus.Stopping)
                         {
-                            Instance.reportStatus(SimulatorStatus.Idle);
+                            reportStatus(SimulatorStatus.Idle);
                         }
                     }
                 }
@@ -657,8 +677,10 @@ namespace Simulator
                 {
                     zip.Close();
 
-                    // TODO: proper exception
-                    throw new ZipException("BundleFormat version mismatch");
+                    throw new ZipException($"BundleFormat: {manifest.assetName} ({manifest.assetGuid}) is for bundle" +
+                                           $" version {manifest.assetFormat}, but currently running simulator supports" +
+                                           $" only {BundleConfig.Versions[BundleConfig.BundleTypes.Environment]} bundle" +
+                                           $" version");
                 }
 
                 if (zip.FindEntry($"{manifest.assetGuid}_environment_textures", false) != -1)
@@ -717,12 +739,12 @@ namespace Simulator
             }
         }
 
-        static void SetupScene(SimulationData simulation)
+        void SetupScene(SimulationData simulation)
         {
             Dictionary<string, GameObject> cachedVehicles = new Dictionary<string, GameObject>();
             try
             {
-                foreach (var agentConfig in Instance.SimConfig.Agents)
+                foreach (var agentConfig in SimConfig.Agents)
                 {
                     var bundlePath = agentConfig.AssetBundle;
                     if (cachedVehicles.ContainsKey(agentConfig.AssetGuid))
@@ -746,9 +768,9 @@ namespace Simulator
                 var sim = CreateSimulatorManager();
                 sim.Init(simulation.Seed);
 
-                if (Instance.CurrentSimulation != null && ConnectionManager.Status != ConnectionManager.ConnectionStatus.Offline)
+                if (Instance.CurrentSimulation != null)
                 {
-                    Instance.reportStatus(SimulatorStatus.Running);
+                    reportStatus(SimulatorStatus.Running);
                 }
 
                 // Flash main window to let user know simulation is ready
@@ -758,14 +780,14 @@ namespace Simulator
             {
                 Debug.Log($"Failed to start '{simulation.Name}' simulation - out of date asset bundles");
                 Debug.LogException(ex);
-                Instance.reportStatus(SimulatorStatus.Error, ex.Message);
+                reportStatus(SimulatorStatus.Error, ex.Message);
                 ResetLoaderScene(simulation);
             }
             catch (Exception ex)
             {
                 Debug.Log($"Failed to start '{simulation.Name}' simulation");
                 Debug.LogException(ex);
-                Instance.reportStatus(SimulatorStatus.Error, ex.Message);
+                reportStatus(SimulatorStatus.Error, ex.Message);
                 ResetLoaderScene(simulation);
             }
         }
@@ -798,8 +820,10 @@ namespace Simulator
                 {
                     zip.Close();
 
-                    // TODO: proper exception
-                    throw new ZipException("BundleFormat version mismatch");
+                    throw new ZipException($"BundleFormat: {manifest.assetName} ({manifest.assetGuid}) is for bundle" +
+                                           $" version {manifest.assetFormat}, but currently running simulator supports" +
+                                           $" only {BundleConfig.Versions[BundleConfig.BundleTypes.Environment]} bundle" +
+                                           $" version");
                 }
 
                 if (zip.FindEntry($"{manifest.assetGuid}_vehicle_textures", true) != -1)
@@ -890,31 +914,31 @@ namespace Simulator
 
         }
 
-        public static void ResetLoaderScene(SimulationData simulation)
+        public void ResetLoaderScene(SimulationData simulation)
         {
-            if (SceneManager.GetActiveScene().name != Instance.LoaderScene && ConnectionManager.Status != ConnectionManager.ConnectionStatus.Offline)
+            if (SceneManager.GetActiveScene().name != LoaderScene)
             {
-                Instance.reportStatus(SimulatorStatus.Stopping);
+                reportStatus(SimulatorStatus.Stopping);
 
-                SceneManager.LoadScene(Instance.LoaderScene);
+                SceneManager.LoadScene(LoaderScene);
                 AssetBundle.UnloadAllAssetBundles(true);
                 // changing Status requires CurrentSimulation to be valid
-                Instance.reportStatus(SimulatorStatus.Idle);
+                reportStatus(SimulatorStatus.Idle);
             }
         }
 
-        public static async Task EnterScenarioEditor()
+        public async Task EnterScenarioEditor()
         {
             if (SimulatorManager.InstanceAvailable || ApiManager.Instance)
             {
-                Instance.ConnectionUI.UpdateStatusText("Cannot enter Scenario Editor during a simulation.");
+                ConnectionUI.UpdateStatusText("Cannot enter Scenario Editor during a simulation.");
                 Debug.LogWarning("Cannot enter Scenario Editor during a simulation.");
                 return;
             }
 
             if (ConnectionManager.Status != ConnectionManager.ConnectionStatus.Online)
             {
-                Instance.ConnectionUI.UpdateStatusText("Cannot enter Scenario Editor when connection is not established.");
+                ConnectionUI.UpdateStatusText("Cannot enter Scenario Editor when connection is not established.");
                 Debug.LogWarning("Cannot enter Scenario Editor when connection is not established.");
                 return;
             }
@@ -922,7 +946,7 @@ namespace Simulator
             var maps = await ConnectionManager.API.GetLibrary<MapDetailData>();
             if (maps.Length == 0)
             {
-                Instance.ConnectionUI.UpdateStatusText("Scenario Editor requires at least one map added to the library.");
+                ConnectionUI.UpdateStatusText("Scenario Editor requires at least one map added to the library.");
                 Debug.LogWarning("Scenario Editor requires at least one map added to the library.");
                 return;
             }
@@ -930,7 +954,7 @@ namespace Simulator
             var egos = await ConnectionManager.API.GetLibrary<VehicleDetailData>();
             if (egos.Length == 0)
             {
-                Instance.ConnectionUI.UpdateStatusText("Scenario Editor requires at least one ego vehicle added to the library.");
+                ConnectionUI.UpdateStatusText("Scenario Editor requires at least one ego vehicle added to the library.");
                 Debug.LogWarning("Scenario Editor requires at least one ego vehicle added to the library.");
                 return;
             }
@@ -942,48 +966,27 @@ namespace Simulator
             }
         }
 
-        public static void ExitScenarioEditor()
+        public void ExitScenarioEditor()
         {
             IsInScenarioEditor = false;
             if (SceneManager.GetSceneByName(ScenarioEditorSceneName).isLoaded)
             {
-                SceneManager.LoadScene(Instance.LoaderScene);
+                SceneManager.LoadScene(LoaderScene);
             }
         }
 
-        static string ByteArrayToString(byte[] ba)
+        public SimulatorManager CreateSimulatorManager()
         {
-            StringBuilder hex = new StringBuilder(ba.Length * 2);
-            foreach (byte b in ba)
-            {
-                hex.AppendFormat("{0:x2}", b);
-            }
-            return hex.ToString();
-        }
-
-        static byte[] StringToByteArray(string hex)
-        {
-            int NumberChars = hex.Length;
-            byte[] bytes = new byte[NumberChars / 2];
-            for (int i = 0; i < NumberChars; i += 2)
-            {
-                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
-            }
-            return bytes;
-        }
-
-        public static SimulatorManager CreateSimulatorManager()
-        {
-            var sim = Instantiate(Instance.SimulatorManagerPrefab);
+            var sim = Instantiate(SimulatorManagerPrefab);
             sim.name = "SimulatorManager";
-            Instance.Network.InitializeSimulationScene(sim.gameObject);
+            Network.InitializeSimulationScene(sim.gameObject);
 
             return sim;
         }
 
-        public static TestCaseProcessManager CreateTestCaseProcessManager()
+        public TestCaseProcessManager CreateTestCaseProcessManager()
         {
-            var manager = Instantiate(Instance.TestCaseProcessManagerPrefab);
+            var manager = Instantiate(TestCaseProcessManagerPrefab);
 
             if (manager == null)
             {
@@ -997,7 +1000,7 @@ namespace Simulator
             return manager;
         }
 
-        static void RunTestCase(TemplateData template)
+        void RunTestCase(TemplateData template)
         {
             if (template == null)
             {
@@ -1012,21 +1015,21 @@ namespace Simulator
                 return;
             }
 
-            if (Instance.TCManager == null)
+            if (TCManager == null)
             {
-                Instance.TCManager = CreateTestCaseProcessManager();
-                DontDestroyOnLoad(Instance.TCManager);
+                TCManager = CreateTestCaseProcessManager();
+                DontDestroyOnLoad(TCManager);
             }
 
-            Instance.TCManager.OnFinished += Instance.StopSimulationOnTestCaseExit;
-            Instance.TCManager.OnFinished += Instance.RemoveVolumesOnTestCaseExit;
+            TCManager.OnFinished += StopSimulationOnTestCaseExit;
+            TCManager.OnFinished += RemoveVolumesOnTestCaseExit;
 
             var environment = new Dictionary<string, string>();
 
             SimulationConfigUtils.UpdateTestCaseEnvironment(template, environment);
             var volumesPath = SimulationConfigUtils.SaveVolumes(Instance.CurrentSimulation.Id, template);
 
-            if (!Instance.TCManager.StartProcess(template.Alias, environment, volumesPath))
+            if (!TCManager.StartProcess(template.Alias, environment, volumesPath))
             {
                 // TODO Report testcase error result to the cloud
                 // Stop simulation (by raising an excepton)
@@ -1038,21 +1041,21 @@ namespace Simulator
         {
             Console.WriteLine($"[LOADER] TestCase process exits: {e.ToString()}");
             // Schedule real action to stop simulation
-            Instance.Actions.Enqueue(() =>
+            Actions.Enqueue(() =>
             {
                 if (e.Failed)
                 {
-                    Instance.reportStatus(SimulatorStatus.Error, $"Test case exit code: {e.ExitCode}\nerror data: {e.ErrorData}");
+                    reportStatus(SimulatorStatus.Error, $"Test case exit code: {e.ExitCode}\nerror data: {e.ErrorData}");
                 }
 
                 Console.WriteLine($"[LOADER] Stopping simulation on TestCase process exit");
-                Loader.StopAsync();
+                StopAsync();
             });
         }
 
         void RemoveVolumesOnTestCaseExit(TestCaseFinishedArgs e)
         {
-            Instance.Actions.Enqueue(() =>
+            Actions.Enqueue(() =>
             {
                 Console.WriteLine($"[LOADER] Cleanup volumes on TestCase process exit");
                 Instance.TCManager.OnFinished -= Instance.RemoveVolumesOnTestCaseExit;
@@ -1064,12 +1067,12 @@ namespace Simulator
         {
             StopAsync();
             WaitOnStop();
-            return Instance.status == SimulatorStatus.Idle;
+            return status == SimulatorStatus.Idle;
         }
 
         async void WaitOnStop()
         {
-            while(Instance.status != SimulatorStatus.Idle)
+            while (status != SimulatorStatus.Idle)
             {
                 await Task.Delay(1000);
             }

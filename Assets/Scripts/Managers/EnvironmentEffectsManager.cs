@@ -420,6 +420,16 @@ public class EnvironmentEffectsManager : MonoBehaviour
         }
     }
 
+    public void InitRainVFX(Transform transform)
+    {
+        VFXRain.RegisterTrackedEntity(transform); // API
+    }
+
+    public void ClearRainVFX(Transform transform)
+    {
+        VFXRain.UnregisterTrackedEntity(transform); // API
+    }
+
     private void UpdateRain()
     {
         if (Rain != PrevRain)
@@ -542,7 +552,7 @@ public class EnvironmentEffectsManager : MonoBehaviour
         if (Wet != PrevWet)
         {
             var puddle = Mathf.Clamp01((Wet - 1 / 3f) * 3 / 2f);
-            var damp = Mathf.Clamp01(Wet * 3 / 2f);
+            var damp = Mathf.Clamp01(Wet);
 
             foreach (var m in WetMaterials)
             {

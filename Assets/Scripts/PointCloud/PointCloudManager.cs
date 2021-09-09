@@ -146,23 +146,33 @@ namespace Simulator.PointCloud
         
         public static void RenderLidar(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hdCamera, RTHandle colorBuffer, RTHandle depthBuffer)
         {
+            RenderLidar(context, cmd, hdCamera, colorBuffer, depthBuffer, CubemapFace.Unknown);
+        }
+
+        public static void RenderLidar(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hdCamera, RTHandle colorBuffer, RTHandle depthBuffer, CubemapFace cubemapFace)
+        {
             if (activeInstance == null || activeInstance.renderers == null)
                 return;
             
             foreach (var pointCloudRenderer in activeInstance.renderers)
-                pointCloudRenderer.RenderLidar(cmd, hdCamera, colorBuffer, depthBuffer);
+                pointCloudRenderer.RenderLidar(cmd, hdCamera, colorBuffer, depthBuffer, cubemapFace);
             
             context.ExecuteCommandBuffer(cmd);
             cmd.Clear();
         }
-        
+
         public static void RenderDepth(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hdCamera, RTHandle colorBuffer, RTHandle depthBuffer)
         {
-            if (activeInstance == null)
+            RenderDepth(context, cmd, hdCamera, colorBuffer, depthBuffer, CubemapFace.Unknown);
+        }
+
+        public static void RenderDepth(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hdCamera, RTHandle colorBuffer, RTHandle depthBuffer, CubemapFace cubemapFace)
+        {
+            if (activeInstance == null || activeInstance.renderers == null)
                 return;
 
             foreach (var pointCloudRenderer in activeInstance.renderers)
-                pointCloudRenderer.RenderDepth(cmd, hdCamera, colorBuffer, depthBuffer);
+                pointCloudRenderer.RenderDepth(cmd, hdCamera, colorBuffer, depthBuffer, cubemapFace);
 
             context.ExecuteCommandBuffer(cmd);
             cmd.Clear();

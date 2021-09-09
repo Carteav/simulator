@@ -63,10 +63,19 @@ public class ConnectionManager : MonoBehaviour
         unityThread = Thread.CurrentThread.ManagedThreadId;
         service = new ClientSettingsService();
         ClientSettings settings = service.GetOrMake();
-        API = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID);
-        #if UNITY_EDITOR
+
+        if (string.IsNullOrEmpty(Config.CloudProxy))
+        {
+            API = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID);
+        }
+        else
+        {
+            API = new CloudAPI(new Uri(Config.CloudUrl), Config.SimID, new Uri(Config.CloudProxy));
+        }
+
+#if UNITY_EDITOR
         EditorApplication.playModeStateChanged += HandlePlayMode;
-        #endif
+#endif
 
         if (settings.onlineStatus)
         {
@@ -80,6 +89,7 @@ public class ConnectionManager : MonoBehaviour
         if (state == PlayModeStateChange.ExitingPlayMode)
         {
             Debug.Log("Disconnecting before leaving playmode");
+            Status = ConnectionStatus.Offline;
             API.Disconnect();
         }
     }
@@ -102,7 +112,7 @@ public class ConnectionManager : MonoBehaviour
             DisconnectReason = null;
             RunOnUnityThread(() =>
             {
-                ConnectionUI.instance.UpdateStatus();
+                ConnectionUI.instance?.UpdateStatus();
             });
             
             foreach (var timeOut in timeOutSequence)
@@ -174,11 +184,19 @@ public class ConnectionManager : MonoBehaviour
     {
         await Task.Run(async () =>
         {
-            while (!reader.EndOfStream)
+            try
             {
-                //We are ready to read the stream
-                var line = await reader.ReadLineAsync();
-                await Parse(line);
+                while (!reader.EndOfStream)
+                {
+                    //We are ready to read the stream
+                    var line = await reader.ReadLineAsync();
+                    await Parse(line);
+                }
+            }
+            catch (WebException ex)
+            {
+                if (Status != ConnectionStatus.Offline) throw ex;
+                // when disconnecting, it is expected the task is cancelled.
             }
             Debug.Log("WISE connection closed");
             reader.Dispose();
@@ -189,10 +207,10 @@ public class ConnectionManager : MonoBehaviour
     {
         try
         {
+            Status = ConnectionStatus.Offline;
             API.Disconnect();
             RunOnUnityThread(() =>
             {
-                Status = ConnectionStatus.Offline;
                 ConnectionUI.instance?.UpdateStatus();
             });
         }
@@ -224,21 +242,21 @@ public class ConnectionManager : MonoBehaviour
                                 RunOnUnityThread(() =>
                                 {
                                     Status = ConnectionStatus.Connected;
-                                    ConnectionUI.instance.UpdateStatus();
+                                    ConnectionUI.instance?.UpdateStatus();
                                 });
                                 break;
                             case "OK":
                                 RunOnUnityThread(() =>
                                 {
                                     Status = ConnectionStatus.Online;
-                                    ConnectionUI.instance.UpdateStatus();
+                                    ConnectionUI.instance?.UpdateStatus();
                                 });
                                 break;
                             case "Config":
                                 RunOnUnityThread(() =>
                                 {
                                     Status = ConnectionStatus.Online;
-                                    ConnectionUI.instance.UpdateStatus();
+                                    ConnectionUI.instance?.UpdateStatus();
 
                                     SimulationData simData;
                                     try 
@@ -252,7 +270,7 @@ public class ConnectionManager : MonoBehaviour
                                         Debug.LogException(e);
                                         throw;
                                     }
-                                    Loader.StartSimulation(simData);
+                                    Loader.Instance.StartSimulation(simData);
                                 });
                                 break;
                             case "Disconnect":
@@ -278,7 +296,7 @@ public class ConnectionManager : MonoBehaviour
                                     await API.UpdateStatus("Idle", simData.Id, "");
                                     return;
                                 }
-                                Loader.StopAsync();
+                                Loader.Instance.StopAsync();
                                 break;
                             default:
                                 Debug.LogWarning($"Unknown Status '{status.ToString()}'! Disconnecting.");
@@ -369,7 +387,12 @@ public class ConnectionManager : MonoBehaviour
 
 public class CloudAPI
 {
-    HttpClient client = new HttpClient();
+    HttpClient client;
+    HttpClientHandler handler;
+    CancellationTokenSource requestTokenSource;
+
+    Uri CloudURL;
+    Uri ProxyURL;
     string SimId;
     Uri InstanceURL;
 
@@ -380,17 +403,76 @@ public class CloudAPI
     [NonSerialized]
     public string CloudType;
 
-    public CloudAPI(Uri instanceURL, string simId)
+    public CloudAPI(Uri cloudURL, CookieContainer cookieContainer, Uri proxyURL = null)
     {
-        InstanceURL = instanceURL;
-        SimId = simId;
-        CloudType = InstanceURL.AbsoluteUri;
-        Console.WriteLine("[CONN] Instance URL {0}", CloudType);
+        CloudURL = cloudURL;
+        ProxyURL = proxyURL;
+        SimId = null;
+        handler = new HttpClientHandler();
+        handler.CookieContainer = cookieContainer;
+        handler.AllowAutoRedirect = false;
+        handler.UseCookies = true;
+        if (proxyURL != null)
+        {
+            WebProxy webProxy = new WebProxy(new Uri(Config.CloudProxy));
+            handler.Proxy = webProxy;
+            Console.WriteLine("[CONN] Cloud URL {0}, cookie auth, via proxy {1}", CloudURL.AbsoluteUri, ProxyURL.AbsolutePath);
+        }
+        client = new HttpClient(handler);
+        requestTokenSource = new CancellationTokenSource();
+
+        Console.WriteLine("[CONN] Cloud URL {0}, cookie auth", CloudURL.AbsoluteUri);
     }
 
-    public class NoSuccessException: Exception
+    public CloudAPI(Uri cloudURL, string simId, Uri proxyURL = null)
     {
-        public NoSuccessException(string status) :base(status) { }
+        CloudURL = cloudURL;
+        ProxyURL = proxyURL;
+        SimId = simId;
+
+        HttpClientHandler handler = new HttpClientHandler();
+        if (proxyURL != null)
+        {
+            WebProxy webProxy = new WebProxy(new Uri(Config.CloudProxy));
+            handler.Proxy = webProxy;
+            Console.WriteLine("[CONN] Cloud URL {0} via proxy {1}", CloudURL.AbsoluteUri, ProxyURL.AbsolutePath);
+        }
+        else
+        {
+            Console.WriteLine("[CONN] Cloud URL {0}", CloudURL.AbsoluteUri);
+        }
+        client = new HttpClient(handler);
+        requestTokenSource = new CancellationTokenSource();
+
+    }
+
+    public async Task<bool> Login(string email, string password)
+    {
+        var login = new
+        {
+            email,
+            password
+        };
+
+        var json = Newtonsoft.Json.JsonConvert.SerializeObject(login, JsonSettings.camelCase);
+        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(CloudURL, "/api/v1/auth/login"));
+        message.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        var response = await client.SendAsync(message, HttpCompletionOption.ResponseContentRead, requestTokenSource.Token);
+        // work around for bug where cookies do not happen to be set by the client
+        if (response.Headers.TryGetValues("Set-Cookie", out IEnumerable<string> cookies))
+        {
+            handler.CookieContainer.SetCookies(CloudURL, string.Join(",", cookies));
+        }
+
+        return response.IsSuccessStatusCode;
+    }
+
+    public class NoSuccessException : Exception
+    {
+        public NoSuccessException(string status, HttpStatusCode statusCode) : base(status) {
+            StatusCode = statusCode;
+         }
+        public readonly HttpStatusCode StatusCode;
     }
 
     public async Task<StreamReader> Connect(SimulatorInfo simInfo)
@@ -417,7 +499,7 @@ public class CloudAPI
         {
             Console.WriteLine("[CONN] Failed to connect to WISE");
             var content = await response.Content.ReadAsStringAsync();
-            throw new NoSuccessException($"{content} ({(int)response.StatusCode})");
+            throw new NoSuccessException($"{content} ({(int)response.StatusCode})", response.StatusCode);
         }
         Console.WriteLine("[CONN] Connected to WISE.");
         onlineStream = new StreamReader(await response.Content.ReadAsStreamAsync());
@@ -503,8 +585,8 @@ public class CloudAPI
 
     public async Task<ApiModelType> GetApi<ApiModelType>(string routeAndParams) 
     {
-        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Get, new Uri(InstanceURL, routeAndParams));
-        message.Headers.Add("SimId", SimId);
+        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Get, new Uri(CloudURL, routeAndParams));
+        if (!string.IsNullOrEmpty(SimId)) message.Headers.Add("SimId", SimId);
         message.Headers.Add("Accept", "application/json");
 
         Console.WriteLine($"[CONN] GET {routeAndParams}");
@@ -513,7 +595,7 @@ public class CloudAPI
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new NoSuccessException(response.StatusCode.ToString());
+            throw new NoSuccessException(response.StatusCode.ToString(), response.StatusCode);
         }
         using (var stream = await response.Content.ReadAsStreamAsync())
         {
@@ -546,7 +628,7 @@ public class CloudAPI
     {
         HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(InstanceURL, route));
         message.Content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(data, JsonSettings.camelCase), Encoding.UTF8, "application/json");
-        message.Headers.Add("SimId", Config.SimID);
+        if (!string.IsNullOrEmpty(SimId)) message.Headers.Add("SimId", Config.SimID);
         message.Headers.Add("Accept", "application/json");
 
         Console.WriteLine($"[CONN] POST {route}");
@@ -555,7 +637,7 @@ public class CloudAPI
 
         Console.WriteLine($"[CONN] HTTP {(int)response.StatusCode} {response.StatusCode}");
 
-        if (response.IsSuccessStatusCode)
+        if (!response.IsSuccessStatusCode)
         {
             Debug.Log("Receiving response of " + response.StatusCode + " " + response.Content);
         }
@@ -590,9 +672,9 @@ public class CloudAPI
             }
         }
 
-        var buildVersion = "Development";
+        var buildVersion = Application.version;
         var buildInfo = Resources.Load<BuildInfo>("BuildInfo");
-        if (buildInfo != null)
+        if (buildInfo != null && !string.IsNullOrWhiteSpace(buildInfo.Version))
         {
             buildVersion = buildInfo.Version;
         }
