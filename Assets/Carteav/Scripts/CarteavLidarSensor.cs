@@ -60,7 +60,7 @@ namespace Simulator.Sensors
         protected BaseLink baseLink;
         protected Dictionary<int, PassData> filePassData = new Dictionary<int, PassData>();
         
-        private int customPoints = 500000;
+        private int customPoints = 100000;
         private int customSectors = 24;
         private bool lastFrameCustom;
         private bool indexReset = false;
