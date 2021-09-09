@@ -203,7 +203,14 @@ namespace Simulator.Bridge.Ros2
             int read;
             try
             {
-                read = Socket.EndReceive(ar);
+                if (Socket != null)
+                {
+                    read = Socket.EndReceive(ar);
+                }
+                else
+                {
+                    read = 0;
+                }
             }
             catch (SocketException ex)
             {
