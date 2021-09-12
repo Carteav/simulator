@@ -83,6 +83,9 @@ public class CameraManager : MonoBehaviour
             case CameraStateType.Cinematic:
                 CameraController.SetCinematicCameraState();
                 break;
+            case CameraStateType.Driver:
+                CameraController.SetDriverViewCameraState();
+                break;
         }
         SimulatorManager.Instance.UIManager?.SetCameraButtonState();
     }

@@ -36,7 +36,7 @@ namespace Simulator.Sensors
         private Dictionary<Collider, DetectedRadarObject> Detected = new Dictionary<Collider, DetectedRadarObject>();
         private Dictionary<Collider, Box> Visualized = new Dictionary<Collider, Box>();
                
-        public override SensorDistributionType DistributionType => SensorDistributionType.HighLoad;
+        public override SensorDistributionType DistributionType => SensorDistributionType.ClientOnly;
         
         struct Box
         {
@@ -61,6 +61,16 @@ namespace Simulator.Sensors
             foreach (var radar in radars)
                 radar.SetCallbacks(WhileInRange, OnExitRange);
             nextPublish = Time.time + 1.0f / Frequency;
+        }
+
+        protected override void Initialize()
+        {
+            throw new System.NotImplementedException();
+        }
+
+        protected override void Deinitialize()
+        {
+            throw new System.NotImplementedException();
         }
 
         private void Update()
@@ -236,10 +246,12 @@ namespace Simulator.Sensors
 
                 if (va != null)
                 {
-                    bbox.Size = va.Bounds.size;
-                    size.x = va.Bounds.size.z;
-                    size.y = va.Bounds.size.x;
-                    size.z = va.Bounds.size.y;
+                    var controller = va.GetComponent<IAgentController>();
+                    var bounds = controller.Bounds;
+                    bbox.Size = bounds.size;
+                    size.x = bounds.size.z;
+                    size.y = bounds.size.x;
+                    size.z = bounds.size.y;
                 }
             }
 

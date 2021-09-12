@@ -9,6 +9,7 @@ namespace Simulator.Utilities
 {
     using System;
     using Sensors;
+    using Sensors.Postprocessing;
     using UnityEngine;
     using UnityEngine.Rendering;
     using UnityEngine.Rendering.HighDefinition;
@@ -20,24 +21,6 @@ namespace Simulator.Utilities
             (int) CubemapFace.PositiveZ, (int) CubemapFace.NegativeZ, (int) CubemapFace.PositiveX,
             (int) CubemapFace.NegativeX, (int) CubemapFace.PositiveY, (int) CubemapFace.NegativeY
         };
-
-        private static void SetupGlobalParamsForCubemap(CommandBuffer cmd, Matrix4x4 view, int cubemapSize)
-        {
-            var gpuView = view;
-            if (ShaderConfig.s_CameraRelativeRendering != 0)
-                gpuView.SetColumn(3, new Vector4(0, 0, 0, 1));
-            var gpuProj = GL.GetGPUProjectionMatrix(CubeProj, false);
-            var vp = gpuProj * gpuView;
-
-            cmd.SetGlobalMatrix(ViewMatrix, gpuView);
-            cmd.SetGlobalMatrix(InvViewMatrix, gpuView.inverse);
-            cmd.SetGlobalMatrix(ProjMatrix, gpuProj);
-            cmd.SetGlobalMatrix(InvProjMatrix, gpuProj.inverse);
-            cmd.SetGlobalMatrix(ViewProjMatrix, vp);
-            cmd.SetGlobalMatrix(InvViewProjMatrix, vp.inverse);
-            cmd.SetGlobalMatrix(CameraViewProjMatrix, vp);
-            cmd.SetGlobalVector(ScreenSize, new Vector4(cubemapSize, cubemapSize, 1f / cubemapSize, 1f / cubemapSize));
-        }
 
         /// <summary>
         /// Renders objects with specified pass to given <see cref="SensorRenderTarget"/>.
@@ -73,7 +56,8 @@ namespace Simulator.Utilities
 
         private static void RenderToCubemap(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hd, SensorRenderTarget target, ShaderTagId pass, Color clearColor, Action<CubemapFace> postRender)
         {
-            hd.SetupGlobalParams(cmd, 0);
+            var hdrp = (HDRenderPipeline) RenderPipelineManager.currentPipeline;
+            hdrp.UpdateShaderVariablesForCamera(cmd, hd);
             context.SetupCameraProperties(hd.camera);
 
             var originalProj = hd.camera.projectionMatrix;
@@ -83,6 +67,8 @@ namespace Simulator.Utilities
             var localRot = transform.localRotation;
             var sensor = hd.camera.GetComponent<CameraSensorBase>();
             var renderPostprocess = sensor != null && sensor.Postprocessing != null && sensor.Postprocessing.Count > 0;
+
+            cmd.SetInvertCulling(true); // Cubemap uses RHS standard, face culling has to be inverted
 
             for (var i = 0; i < 6; ++i)
             {
@@ -109,20 +95,14 @@ namespace Simulator.Utilities
                     var sorting = new SortingSettings(hd.camera);
                     var drawing = new DrawingSettings(pass, sorting);
                     var filter = new FilteringSettings(RenderQueueRange.all);
-                    // NOTE: This should flip culling, not hard-set it to front. SRP API does not provide this option
-                    //       currently. Expected issues with front-culled geometry.
-                    // TODO: investigate HDAdditionalCameraData.FlipYMode.ForceFlipY, it might be a way to solve this
-                    var stateBlock = new RenderStateBlock(RenderStateMask.Raster)
-                    {
-                        rasterState = new RasterState
-                        {
-                            cullingMode = CullMode.Front
-                        }
-                    };
-                    context.DrawRenderers(cull, ref drawing, ref filter, ref stateBlock);
+
+                    context.DrawRenderers(cull, ref drawing, ref filter);
 
                     if (renderPostprocess)
-                        SimulatorManager.Instance.Sensors.PostProcessSystem.RenderForSensor(cmd, hd, sensor, target.ColorHandle, (CubemapFace) i);
+                    {
+                        var ctx = new PostProcessPassContext(cmd, hd, target);
+                        SimulatorManager.Instance.Sensors.PostProcessSystem.RenderForSensor(ctx, sensor, (CubemapFace) i);
+                    }
                 }
 
                 if (postRender != null)
@@ -133,11 +113,9 @@ namespace Simulator.Utilities
                 }
             }
 
-            if (renderPostprocess)
-            {
-                context.ExecuteCommandBuffer(cmd);
-                cmd.Clear();
-            }
+            cmd.SetInvertCulling(false);
+            context.ExecuteCommandBuffer(cmd);
+            cmd.Clear();
 
             hd.camera.projectionMatrix = originalProj;
             transform.rotation = rot;
@@ -145,7 +123,8 @@ namespace Simulator.Utilities
 
         private static void RenderToTexture(ScriptableRenderContext context, CommandBuffer cmd, HDCamera hd, SensorRenderTarget target, ShaderTagId pass, Color clearColor, Action<CubemapFace> postRender)
         {
-            hd.SetupGlobalParams(cmd, 0);
+            var hdrp = (HDRenderPipeline) RenderPipelineManager.currentPipeline;
+            hdrp.UpdateShaderVariablesForCamera(cmd, hd);
             context.SetupCameraProperties(hd.camera);
 
             CoreUtils.SetRenderTarget(cmd, target.ColorHandle, target.DepthHandle);
@@ -168,7 +147,8 @@ namespace Simulator.Utilities
             var sensor = hd.camera.GetComponent<CameraSensorBase>();
             if (sensor != null && sensor.Postprocessing != null && sensor.Postprocessing.Count > 0)
             {
-                SimulatorManager.Instance.Sensors.PostProcessSystem.RenderForSensor(cmd, hd, sensor, target.ColorHandle);
+                var ctx = new PostProcessPassContext(cmd, hd, target);
+                SimulatorManager.Instance.Sensors.PostProcessSystem.RenderForSensor(ctx, sensor);
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
             }

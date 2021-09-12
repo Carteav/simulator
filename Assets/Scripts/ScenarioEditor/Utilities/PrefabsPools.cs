@@ -85,8 +85,6 @@ namespace Simulator.ScenarioEditor.Utilities
             private GameObject Populate()
             {
                 var instance = Instantiate(originPrefab, poolParent);
-                if (instance.scene != poolParent.gameObject.scene)
-                    Debug.LogWarning("ERROR");
                 return instance;
             }
         }
@@ -143,6 +141,15 @@ namespace Simulator.ScenarioEditor.Utilities
             var instance = pool.GetInstance();
             instanceToPool.Add(instance, pool);
             return instance;
+        }
+
+        /// <summary>
+        /// Checks if passed instance was created by the pool
+        /// </summary>
+        /// <param name="instance"></param>
+        public bool IsInstanceFromPool(GameObject instance)
+        {
+            return instance != null && instanceToPool.ContainsKey(instance);
         }
 
         /// <summary>

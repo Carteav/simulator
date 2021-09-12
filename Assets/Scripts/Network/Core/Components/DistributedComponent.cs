@@ -7,10 +7,14 @@
 
 namespace Simulator.Network.Core.Components
 {
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
     using System.Net;
     using Connection;
     using Messaging;
     using Messaging.Data;
+    using Threading;
     using UnityEngine;
 
     /// <summary>
@@ -18,6 +22,48 @@ namespace Simulator.Network.Core.Components
     /// </summary>
     public abstract class DistributedComponent : MonoBehaviour, IMessageSender, IMessageReceiver
     {
+        /// <summary>
+        /// Current state of the coroutines
+        /// </summary>
+        protected enum CoroutinesState
+        {
+            /// <summary>
+            /// Coroutines are stopped
+            /// </summary>
+            Stopped,
+
+            /// <summary>
+            /// Coroutines are running on this game object
+            /// </summary>
+            RunningOnObject,
+
+            /// <summary>
+            /// Coroutines are running on the thread dispatcher
+            /// </summary>
+            RunningOnDispatcher
+        }
+
+        /// <summary>
+        /// Current initialization state of this component
+        /// </summary>
+        public enum InitializationState
+        {
+            /// <summary>
+            /// Component is currently deinitialized
+            /// </summary>
+            Deinitialized,
+            
+            /// <summary>
+            /// Component is initializing asynchronously
+            /// </summary>
+            Initializing,
+            
+            /// <summary>
+            /// Component is initialized
+            /// </summary>
+            Initialized
+        }
+
         /// <summary>
         /// Cached IMessageReceiver key
         /// </summary>
@@ -27,11 +73,16 @@ namespace Simulator.Network.Core.Components
         /// Parent distributed object of this component
         /// </summary>
         private DistributedObject parentObject;
+        
+        /// <summary>
+        /// Current initialization state of this component
+        /// </summary>
+        public InitializationState State { get; protected set; }
 
         /// <summary>
         /// Is this distributed component initialized
         /// </summary>
-        public bool IsInitialized { get; private set; }
+        public bool IsInitialized => State == InitializationState.Initialized;
 
         /// <summary>
         /// Component key required to bind with corresponding mocked component
@@ -44,14 +95,19 @@ namespace Simulator.Network.Core.Components
         protected virtual bool DestroyWithoutParent { get; } = false;
 
         /// <summary>
+        /// Is this distributed component authoritative (sends data to other components)
+        /// </summary>
+        protected bool IsAuthoritative => ParentObject.IsAuthoritative;
+
+        /// <summary>
         /// Expected maximum size of the snapshots
         /// </summary>
         protected virtual int SnapshotMaxSize { get; } = 0;
 
         /// <inheritdoc/>
-        public string Key => key ?? (key =
-                                 $"{ParentObject.Key}/{HierarchyUtilities.GetRelativePath(ParentObject.transform, transform)}{ComponentKey}"
-                             );
+        public string Key =>
+            key ??=
+                $"{ParentObject.Key}/{HierarchyUtilities.GetRelativePath(ParentObject.transform, transform)}{ComponentKey}";
 
         /// <summary>
         /// Parent distributed object of this component
@@ -59,10 +115,39 @@ namespace Simulator.Network.Core.Components
         public DistributedObject ParentObject => parentObject ? parentObject : parentObject = LocateParentObject();
 
         /// <summary>
+        /// Required coroutines of this component
+        /// </summary>
+        protected List<IEnumerator> requiredCoroutines = new List<IEnumerator>();
+
+        /// <summary>
+        /// Current coroutines state
+        /// </summary>
+        protected CoroutinesState coroutinesState;
+
+        /// <summary>
         /// Unity Start method
         /// </summary>
         protected virtual void Start()
         {
+            CallInitialize();
+        }
+
+        /// <summary>
+        /// Unity OnDestroy method
+        /// </summary>
+        protected virtual void OnDestroy()
+        {
+            Deinitialize();
+        }
+
+        /// <summary>
+        /// Calls the initialize method, can be delayed if parent object is not initialized
+        /// </summary>
+        public virtual void CallInitialize()
+        {
+            if (State != InitializationState.Deinitialized)
+                return;
+            
             if (ParentObject == null)
             {
                 if (DestroyWithoutParent)
@@ -72,11 +157,14 @@ namespace Simulator.Network.Core.Components
             {
                 if (ParentObject.IsInitialized)
                     Initialize();
-                else if (ParentObject.WillBeDestroyed){
+                else if (ParentObject.WillBeDestroyed)
+                {
                     if (DestroyWithoutParent)
                         SelfDestroy();
-                } else
+                }
+                else
                 {
+                    State = InitializationState.Initializing;
                     ParentObject.Initialized += Initialize;
                     ParentObject.DestroyCalled += SelfDestroy;
                 }
@@ -84,11 +172,29 @@ namespace Simulator.Network.Core.Components
         }
 
         /// <summary>
-        /// Unity OnDestroy method
+        /// Unity OnEnable method
         /// </summary>
-        protected virtual void OnDestroy()
+        protected void OnEnable()
         {
-            Deinitialize();
+            if (IsInitialized && ParentObject != null)
+            {
+                if (coroutinesState != CoroutinesState.Stopped)
+                    return;
+
+                StartRequiredCoroutines();
+            }
+        }
+
+        /// <summary>
+        /// Unity OnDisable method
+        /// </summary>
+        protected void OnDisable()
+        {
+            if (coroutinesState == CoroutinesState.RunningOnObject)
+            {
+                requiredCoroutines = null;
+                coroutinesState = CoroutinesState.Stopped;
+            }
         }
 
         protected virtual void SelfDestroy()
@@ -103,11 +209,17 @@ namespace Simulator.Network.Core.Components
         {
             if (IsInitialized)
                 return;
-            ParentObject.Initialized -= Initialize;
-            ParentObject.DestroyCalled -= SelfDestroy;
+            if (State == InitializationState.Initializing)
+            {
+                ParentObject.Initialized -= Initialize;
+                ParentObject.DestroyCalled -= SelfDestroy;
+            }
+
             ParentObject.RegisterComponent(this);
-            IsInitialized = true;
+            State = InitializationState.Initialized;
             BroadcastSnapshot(true);
+            ParentObject.IsAuthoritativeChanged += ParentObjectOnIsAuthoritativeChanged;
+            ParentObjectOnIsAuthoritativeChanged(ParentObject.IsAuthoritative);
         }
 
         /// <summary>
@@ -115,10 +227,120 @@ namespace Simulator.Network.Core.Components
         /// </summary>
         public virtual void Deinitialize()
         {
-            if (!IsInitialized)
+            switch (State)
+            {
+                case InitializationState.Deinitialized:
+                    return;
+                
+                case InitializationState.Initializing:
+                    ParentObject.Initialized -= Initialize;
+                    ParentObject.DestroyCalled -= SelfDestroy;
+                    State = InitializationState.Deinitialized;
+                    return;
+                
+                case InitializationState.Initialized:
+                    //Check if this object is currently being destroyed
+                    if (this != null)
+                    {
+                        ParentObject.UnregisterComponent(this);
+                        ParentObject.Initialized -= Initialize;
+                        ParentObject.DestroyCalled -= SelfDestroy;
+                        ParentObject.IsAuthoritativeChanged -= ParentObjectOnIsAuthoritativeChanged;
+                    }
+
+                    StopCoroutines();
+                    State = InitializationState.Deinitialized;
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Method that starts or stops required coroutines
+        /// </summary>
+        /// <param name="isAuthoritative">Is the parent <see cref="DistributedObject"/> authoritative</param>
+        private void ParentObjectOnIsAuthoritativeChanged(bool isAuthoritative)
+        {
+            StopCoroutines();
+            StartRequiredCoroutines();
+        }
+
+        /// <summary>
+        /// Gets the required coroutines and starts them
+        /// </summary>
+        protected virtual void StartRequiredCoroutines()
+        {
+            if (coroutinesState != CoroutinesState.Stopped)
+            {
+                Log.Warning("Cannot start required coroutines. Stop coroutines before starting them again.");
                 return;
-            ParentObject.UnregisterComponent(this);
-            IsInitialized = false;
+            }
+
+            requiredCoroutines = GetRequiredCoroutines();
+            if (isActiveAndEnabled)
+            {
+                if (requiredCoroutines != null)
+                    foreach (var requiredCoroutine in requiredCoroutines)
+                    {
+                        StartCoroutine(requiredCoroutine);
+                    }
+
+                coroutinesState = CoroutinesState.RunningOnObject;
+            }
+            else
+            {
+                if (requiredCoroutines != null)
+                    foreach (var requiredCoroutine in requiredCoroutines)
+                    {
+                        ThreadingUtilities.Dispatcher.StartCoroutine(requiredCoroutine);
+                    }
+
+                coroutinesState = CoroutinesState.RunningOnDispatcher;
+            }
+        }
+
+        /// <summary>
+        /// Stops coroutines added to the required coroutines list and clears the list
+        /// </summary>
+        protected virtual void StopCoroutines()
+        {
+            switch (coroutinesState)
+            {
+                case CoroutinesState.Stopped:
+                    break;
+                case CoroutinesState.RunningOnObject:
+                    if (requiredCoroutines != null)
+                        foreach (var requiredCoroutine in requiredCoroutines)
+                        {
+                            if (requiredCoroutine != null)
+                                StopCoroutine(requiredCoroutine);
+                        }
+
+                    requiredCoroutines = null;
+                    coroutinesState = CoroutinesState.Stopped;
+                    break;
+                case CoroutinesState.RunningOnDispatcher:
+                    if (requiredCoroutines != null && ThreadingUtilities.Dispatcher != null)
+                        foreach (var requiredCoroutine in requiredCoroutines)
+                        {
+                            if (requiredCoroutine != null)
+                                ThreadingUtilities.Dispatcher.StopCoroutine(requiredCoroutine);
+                        }
+
+                    requiredCoroutines = null;
+                    coroutinesState = CoroutinesState.Stopped;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+        }
+
+        /// <summary>
+        /// Gets the list of required coroutines to be running in the current component state
+        /// </summary>
+        /// <returns>List of required coroutines to be running</returns>
+        protected virtual List<IEnumerator> GetRequiredCoroutines()
+        {
+            return null;
         }
 
         /// <summary>
@@ -139,14 +361,14 @@ namespace Simulator.Network.Core.Components
         /// <inheritdoc/>
         public void UnicastMessage(IPEndPoint endPoint, DistributedMessage distributedMessage)
         {
-            if (IsInitialized)
+            if (IsInitialized && distributedMessage != null)
                 ParentObject.UnicastMessage(endPoint, distributedMessage);
         }
 
         /// <inheritdoc/>
         public void BroadcastMessage(DistributedMessage distributedMessage)
         {
-            if (IsInitialized)
+            if (IsInitialized && distributedMessage != null)
                 ParentObject.BroadcastMessage(distributedMessage);
         }
 
@@ -162,8 +384,8 @@ namespace Simulator.Network.Core.Components
         /// <summary>
         /// Get current component snapshot
         /// </summary>
-        /// <returns>Current component snapshot</returns>
-        protected abstract void PushSnapshot(BytesStack messageContent);
+        /// <returns>True if snapshot was pushed, false otherwise</returns>
+        protected abstract bool PushSnapshot(BytesStack messageContent);
 
         /// <summary>
         /// Gets snapshot message to be send
@@ -172,7 +394,8 @@ namespace Simulator.Network.Core.Components
         protected DistributedMessage GetSnapshotMessage(bool reliableSnapshot = false)
         {
             var message = MessagesPool.Instance.GetMessage(SnapshotMaxSize);
-            PushSnapshot(message.Content);
+            if (!PushSnapshot(message.Content))
+                return null;
             message.AddressKey = Key;
             message.Type = reliableSnapshot
                 ? DistributedMessageType.ReliableOrdered
@@ -202,8 +425,25 @@ namespace Simulator.Network.Core.Components
         /// <inheritdoc/>
         public void ReceiveMessage(IPeerManager sender, DistributedMessage distributedMessage)
         {
-            if (!ParentObject.IsAuthoritative)
-                ParseMessage(distributedMessage);
+            if (ParentObject.IsAuthoritative)
+                return;
+
+            DistributedMessage messageCopy = null;
+            if (ParentObject.ForwardMessages)
+            {
+                messageCopy = new DistributedMessage(distributedMessage);
+                if (string.IsNullOrEmpty(messageCopy.AddressKey))
+                    Log.Error("Null before");
+            }
+
+            ParseMessage(distributedMessage);
+            if (ParentObject.ForwardMessages && messageCopy != null)
+            {
+                if (!string.IsNullOrEmpty(messageCopy.AddressKey))
+                    BroadcastMessage(messageCopy);
+                else
+                    Log.Error("Null after");
+            }
         }
 
         /// <summary>

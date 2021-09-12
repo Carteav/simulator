@@ -1,8 +1,6 @@
 ﻿#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
 
-#pragma kernel LidarCustomCompute           LIDAR_CUSTOM_COMPUTE=LidarCustomCompute
-#pragma kernel LidarCustomComputeComp       LIDAR_CUSTOM_COMPUTE=LidarCustomComputeComp                               COMPENSATED
 #pragma kernel LidarCompute                 LIDAR_COMPUTE=LidarCompute
 #pragma kernel LidarComputeComp             LIDAR_COMPUTE=LidarComputeComp                               COMPENSATED
 #pragma kernel VelodyneCompute16            VELODYNE_COMPUTE=VelodyneCompute16               VLP_16
@@ -38,11 +36,6 @@ CBUFFER_START(cb0)
     float4 _DirLidarDeltaX;
     float4 _DirLidarDeltaY;
 
-    // Custom Properties:
-    int _CustomPoints;
-    int _CustomSectors;
-    int _CustomIdx;
-
 CBUFFER_END
 
 TEXTURE2D_X(_Input);
@@ -50,77 +43,10 @@ RWStructuredBuffer<float4> _Output;
 StructuredBuffer<float> _SinLatitudeAngles;
 StructuredBuffer<float> _CosLatitudeAngles;
 
-// Custom Buffers:
-StructuredBuffer<int> _CustomSize;
-StructuredBuffer<int> _CustomIndex;
-StructuredBuffer<float> _CustomYaw;
-StructuredBuffer<float> _CustomPitch;
-
 float DecodeFloatRGB(float3 rgb)
 {
     return rgb.r + rgb.g / 255.0f + rgb.b / 65025.0f;
 }
-
-[numthreads(8,8,1)]
-void LIDAR_CUSTOM_COMPUTE (uint3 id : SV_DispatchThreadID)
-{
-    if (id.y >= (uint) _CustomSize[_CustomIdx]) //id.x >= (uint) _Count || 
-        return;
-
-    const float sinLatitudeAngle = sin(_CustomPitch[_CustomIdx * _CustomPoints + id.y]);//_SinLatitudeAngles[id.y];
-    const float cosLatitudeAngle = cos(_CustomPitch[_CustomIdx * _CustomPoints + id.y]);//_CosLatitudeAngles[id.y];
-
-    const int indexOffset = 0;//id.y * _MeasurementsPerRotation;
-    const float dy = sinLatitudeAngle;//cosLatitudeAngle;
-    const float rProjected = cosLatitudeAngle;//sinLatitudeAngle;
-
-    //const float sinDelta = sin(id.x * 0.01745329 * _LongitudeAngles.z);
-    //const float cosDelta = cos(id.x * 0.01745329 * _LongitudeAngles.z);
-    const float sinLongitudeAngle = sin(_CustomYaw[_CustomIdx * _CustomPoints + id.y]);//_LongitudeAngles.x * cosDelta - _LongitudeAngles.y * sinDelta;
-    const float cosLongitudeAngle = cos(_CustomYaw[_CustomIdx * _CustomPoints + id.y]);//_LongitudeAngles.y * cosDelta + _LongitudeAngles.x * sinDelta;
-
-    const float dz = rProjected * sinLongitudeAngle;
-    const float dx = rProjected * cosLongitudeAngle;
-
-    const float scale = _ScaleDistance.z / dz;
-    const float xx = dx * scale;
-    const float yy = dy * scale;
-    const int x = (int) (xx / _ScaleDistance.x + _TexSize.x * 0.5);
-    const int y = (int) (yy / _ScaleDistance.y + _TexSize.y * 0.5);
-
-    const int index = indexOffset + _CustomIndex[_CustomIdx] + id.y;//indexOffset + (_Index + id.x) % _MeasurementsPerRotation;
-    float distance;
-    float intensity;
-
-    if (x < 0 || x >= _TexSize.x || y < 0 || y >= _TexSize.y)
-    {
-        distance = 0;
-        intensity = 0;
-    }
-    else
-    {
-        const float4 sample = LOAD_TEXTURE2D_X(_Input, uint2(x, y));
-        distance = 2.0f * DecodeFloatRGB(sample.rgb);
-        intensity = sample.a;
-    }
-
-    if (distance == 0)
-    {
-        _Output[index] = float4(0, 0, 0, 0);
-    }
-    else
-    {
-        const float3 dir = mul(_CameraToWorld, float4(xx, yy, -_ScaleDistance.z, 1)).xyz - _Origin.xyz;
-        float3 position = _Origin.xyz + normalize(dir) * distance * _ScaleDistance.w;
-
-        #ifndef COMPENSATED
-        position = mul(_Transform, float4(position, 1)).xyz;
-        #endif
-
-        _Output[index] = float4(position, intensity);
-    }
-}
-
 
 [numthreads(8,8,1)]
 void LIDAR_COMPUTE (uint3 id : SV_DispatchThreadID)
@@ -438,7 +364,7 @@ void DIR_LIDAR_COMPUTE (uint3 id : SV_DispatchThreadID)
     const float distance = 2.0f * DecodeFloatRGB(sample.rgb);
 
     const int index = indexOffset + (_Index + id.x) % _MeasurementsPerRotation;
-    if (distance == 0 || dot(dirNorm, _DirLidarForward) < _CosAngle)
+    if (distance == 0 || dot(dirNorm, _DirLidarForward.xyz) < _CosAngle)
     {
         _Output[index] = float4(0, 0, 0, 0);
     }

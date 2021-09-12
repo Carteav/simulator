@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using Simulator.Bridge;
 using Simulator.Bridge.Data;
-using Simulator.Bridge.Ros2;
-using Simulator.Bridge.Ros2.Lgsvl;
-using Simulator.Bridge.Ros2.Ros;
+using Simulator.Bridge.Data.Ros;
+
 using Vector3 = UnityEngine.Vector3;
 
 namespace Carteav.Messages

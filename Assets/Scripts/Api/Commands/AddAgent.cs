@@ -138,8 +138,11 @@ namespace Simulator.Api.Commands
                     }
 
                     var rb = agentGO.GetComponent<Rigidbody>();
-                    rb.velocity = velocity;
-                    rb.angularVelocity = angular_velocity;
+                    if (rb != null)
+                    {
+                        rb.velocity = velocity;
+                        rb.angularVelocity = angular_velocity;
+                    }
 
                     Debug.Assert(agentGO != null);
                     api.Agents.Add(uid, agentGO);
@@ -161,7 +164,7 @@ namespace Simulator.Api.Commands
                 else if (type == (int)AgentType.Npc)
                 {
                     var colorData = args["color"].ReadVector3();
-                    var template = sim.NPCManager.NPCVehicles.Find(obj => obj.Prefab.name == name); // TODO need to search all available npcs including npc bundles
+                    var template = sim.NPCManager.NPCVehicles.Find(obj => obj.Prefab.name == name);
                     if (template.Prefab == null)
                     {
                         throw new Exception($"Unknown '{name}' NPC name");
@@ -207,7 +210,7 @@ namespace Simulator.Api.Commands
                         throw new Exception($"{sceneName} is missing Pedestrian NavMesh");
                     }
 
-                    var model = sim.PedestrianManager.pedModels.Find(obj => obj.name == name);
+                    var model = sim.PedestrianManager.PedestrianData.Find(obj => obj.Name == name).Prefab;
                     if (model == null)
                     {
                         throw new Exception($"Unknown '{name}' pedestrian name");

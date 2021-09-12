@@ -5,28 +5,26 @@
  *
  */
 
-using System;
-using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.Threading.Tasks;
-using UnityEngine;
-using UnityEngine.Rendering;
-using Simulator.Bridge;
-using Simulator.Bridge.Data;
-using Simulator.Plugins;
-using Simulator.Utilities;
-using Simulator.Sensors.UI;
-using UnityEngine.Rendering.HighDefinition;
-using Unity.Collections;
-
-using LensDistortion = Simulator.Utilities.LensDistortion;
-using UnityEngine.Experimental.Rendering;
-
 namespace Simulator.Sensors
 {
-    using Analysis;
-    using Postprocessing;
+    using System;
     using System.Collections;
+    using System.Collections.Concurrent;
+    using System.Collections.Generic;
+    using System.Threading.Tasks;
+    using Analysis;
+    using Bridge;
+    using Bridge.Data;
+    using Plugins;
+    using Postprocessing;
+    using UI;
+    using Unity.Collections;
+    using UnityEngine;
+    using UnityEngine.Experimental.Rendering;
+    using UnityEngine.Rendering;
+    using UnityEngine.Rendering.HighDefinition;
+    using Utilities;
+    using LensDistortion = Utilities.LensDistortion;
 
     [RequireComponent(typeof(Camera))]
     public abstract class CameraSensorBase: SensorBase
@@ -73,13 +71,19 @@ namespace Simulator.Sensors
         [SensorParameter]
         public float Xi = 0.0f;
 
+        [SensorParameter]
+        public string CameraInfoTopic;
+
         public List<PostProcessData> Postprocessing;
 
         public List<PostProcessData> LatePostprocessing;
 
         BridgeInstance Bridge;
         Publisher<ImageData> Publish;
+        Publisher<CameraInfoData> CameraInfoPublish;
         uint Sequence;
+
+        CameraInfoData CameraInfoData;
 
         const int MaxJpegSize = 4 * 1024 * 1024; // 4MB
 
@@ -114,7 +118,8 @@ namespace Simulator.Sensors
 
         protected RenderTextureReadWrite CameraTargetTextureReadWriteType = RenderTextureReadWrite.sRGB;
 
-        public override SensorDistributionType DistributionType => SensorDistributionType.UltraHighLoad;
+        public override SensorDistributionType DistributionType => SensorDistributionType.ClientOnly;
+        public override float PerformanceLoad { get; } = 1.0f;
 
         protected SensorRenderTarget renderTarget;
 
@@ -160,13 +165,13 @@ namespace Simulator.Sensors
         private bool LowFPS = false;
         #endregion
 
-        public virtual void Start()
+        protected override void Initialize()
         {
             SensorCamera.enabled = false;
             HDAdditionalCameraData.hasPersistentHistory = true;
         }
 
-        public void OnDestroy()
+        protected override void Deinitialize()
         {
             renderTarget?.Release();
             DistortedHandle?.Release();
@@ -189,6 +194,10 @@ namespace Simulator.Sensors
         {
             Bridge = bridge;
             Publish = bridge.AddPublisher<ImageData>(Topic);
+            if (!string.IsNullOrEmpty(CameraInfoTopic))
+            {
+                CameraInfoPublish = bridge.AddPublisher<CameraInfoData>(CameraInfoTopic);
+            }
         }
 
         protected virtual void Update()
@@ -209,6 +218,12 @@ namespace Simulator.Sensors
 
             CheckTexture();
             CheckCapture();
+
+            if (CameraInfoPublish != null)
+            {
+                InitCameraInfoData();
+            }
+
             ProcessReadbackRequests();
         }
 
@@ -338,7 +353,8 @@ namespace Simulator.Sensors
                 }
 
                 cmd.SetGlobalVector(ScreenSizeProperty, new Vector4(Width, Height, 1.0f / Width, 1.0f / Height));
-                SimulatorManager.Instance.Sensors.PostProcessSystem.RenderLateForSensor(cmd, hd, this, DistortedHandle.ColorHandle);
+                var ctx = new PostProcessPassContext(cmd, hd, DistortedHandle);
+                SimulatorManager.Instance.Sensors.PostProcessSystem.RenderLateForSensor(ctx, this);
             }
 
             FinalRenderTarget.BlitTo2D(cmd, hd);
@@ -426,8 +442,19 @@ namespace Simulator.Sensors
                             imageData.Length = JpegEncoder.Encode(capture.GpuData, Width, Height, 4, JpegQuality, imageData.Bytes);
                             if (imageData.Length > 0)
                             {
-                                imageData.Time = capture.CaptureTime;
+                                var time = capture.CaptureTime;
+                                imageData.Time = time;
                                 Publish(imageData);
+
+                                if (CameraInfoData != null)
+                                {
+                                    CameraInfoData.Name = Name;
+                                    CameraInfoData.Frame = Frame;
+                                    CameraInfoData.Time = time;
+                                    CameraInfoData.Sequence = Sequence;
+
+                                    CameraInfoPublish?.Invoke(CameraInfoData);
+                                }
                             }
                             else
                             {
@@ -529,7 +556,7 @@ namespace Simulator.Sensors
                 LowFPSCalculatedTime += delta;
                 if (LowFPSCalculatedTime >= TargetFPSTime)
                 {
-                    LowFPSEvent(GetComponentInParent<AgentController>().GTID, delta, fps);
+                    LowFPSEvent(GetComponentInParent<IAgentController>().GTID, delta, fps);
                     LowFPSCalculatedTime = 0f;
                     LowFPS = true;
                 }
@@ -553,6 +580,39 @@ namespace Simulator.Sensors
                 { "Status", AnalysisManager.AnalysisStatusType.Failed },
             };
             SimulatorManager.Instance.AnalysisManager.AddEvent(data);
+        }
+
+        private void InitCameraInfoData()
+        {
+            if (CameraInfoData != null)
+            {
+                return;
+            }
+
+            var vFOV = SensorCamera.fieldOfView * Mathf.Deg2Rad;
+            var hFOV = 2 * Mathf.Atan(Mathf.Tan(SensorCamera.fieldOfView * Mathf.Deg2Rad / 2) * SensorCamera.aspect);
+
+            double fx = (double)(SensorCamera.pixelWidth / (2.0f * Mathf.Tan(0.5f * hFOV)));
+            double fy = (double)(SensorCamera.pixelHeight / (2.0f * Mathf.Tan(0.5f * vFOV)));
+            double cx = SensorCamera.pixelWidth / 2.0f;
+            double cy = SensorCamera.pixelHeight / 2.0f;
+
+            CameraInfoData = new CameraInfoData();
+            CameraInfoData.Width = SensorCamera.pixelWidth;
+            CameraInfoData.Height = SensorCamera.pixelHeight;
+            CameraInfoData.FocalLengthX = fx;
+            CameraInfoData.FocalLengthY = fx;
+            CameraInfoData.PrincipalPointX = cx;
+            CameraInfoData.PrincipalPointY = cy;
+
+            if (Distorted)
+            {
+                CameraInfoData.DistortionParameters = DistortionParameters.ToArray();
+            }
+            else
+            {
+                CameraInfoData.DistortionParameters = new float[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+            }
         }
     }
 }

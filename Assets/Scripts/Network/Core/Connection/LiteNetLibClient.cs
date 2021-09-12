@@ -35,13 +35,13 @@ namespace Simulator.Network.Core.Connection
         /// <summary>
         /// Currently active connections made by this connection manager
         /// </summary>
-        private Dictionary<IPEndPoint, LiteNetLibPeerManager> activeConnections =
-            new Dictionary<IPEndPoint, LiteNetLibPeerManager>();
+        private readonly Dictionary<IPEndPoint, IPeerManager> peers =
+            new Dictionary<IPEndPoint, IPeerManager>();
 
         /// <summary>
         /// Peer manager for connection with the server
         /// </summary>
-        private LiteNetLibPeerManager masterPeer;
+        private IPeerManager masterPeer;
 
         /// <inheritdoc/>
         public bool IsServer => false;
@@ -67,11 +67,14 @@ namespace Simulator.Network.Core.Connection
 
         /// <inheritdoc/>
         public List<string> AcceptableIdentifiers { get; } = new List<string>();
-
+        
+        /// <inheritdoc/>
+        public Dictionary<IPEndPoint, IPeerManager> ConnectedPeers => peers;
+        
         /// <summary>
         /// Peer manager for connection with the server
         /// </summary>
-        public LiteNetLibPeerManager MasterPeer => masterPeer;
+        public IPeerManager MasterPeer => masterPeer;
 
         /// <inheritdoc/>
         public event Action<IPeerManager> PeerConnected;
@@ -104,11 +107,11 @@ namespace Simulator.Network.Core.Connection
             var result = Port == 0 ? NetClient.Start() : NetClient.Start(Port);
             if (result)
             {
-                var portLog = Port == 0 ? $" Using the port '{Port}'" : "";
+                var portLog = Port == 0 ? $" Using local port '{NetClient.LocalPort}'" : "";
                 Log.Info($"{GetType().Name} started.{portLog}");
             }
             else
-                Log.Error($"{GetType().Name} failed to start using the port '{Port}'.");
+                Log.Error($"{GetType().Name} failed to start using local port '{NetClient.LocalPort}'.");
             return result;
         }
 
@@ -122,7 +125,7 @@ namespace Simulator.Network.Core.Connection
         /// <inheritdoc/>
         public IPeerManager Connect(IPEndPoint endPoint, string peerIdentifier)
         {
-            if (activeConnections.ContainsKey(endPoint))
+            if (peers.ContainsKey(endPoint))
             {
                 Log.Warning($"{GetType().Name} already got a connection active to the endpoint '{endPoint}'.");
                 return null;
@@ -132,7 +135,7 @@ namespace Simulator.Network.Core.Connection
             writer.Put(ApplicationKey);
             writer.Put(peerIdentifier);
             var peer = new LiteNetLibPeerManager(NetClient.Connect(endPoint, writer));
-            activeConnections.Add(endPoint, peer);
+            peers.Add(endPoint, peer);
             Log.Info(
                 $"{GetType().Name} tries to connect with a peer at address '{endPoint}, current UTC time: {DateTime.UtcNow.ToString(CultureInfo.InvariantCulture)}.");
             return peer;
@@ -181,13 +184,13 @@ namespace Simulator.Network.Core.Connection
         {
             if (MasterPeer != null)
             {
-                activeConnections.Remove(peer.EndPoint);
+                peers.Remove(peer.EndPoint);
                 return;
             }
-            if (!activeConnections.TryGetValue(peer.EndPoint, out masterPeer))
+            if (!peers.TryGetValue(peer.EndPoint, out masterPeer))
             {
                 masterPeer = new LiteNetLibPeerManager(peer);
-                activeConnections.Add(peer.EndPoint, MasterPeer);
+                peers.Add(peer.EndPoint, MasterPeer);
             }
 
             Log.Info($"{GetType().Name} has connected to the master peer '{MasterPeer.PeerEndPoint}'.");
@@ -208,7 +211,7 @@ namespace Simulator.Network.Core.Connection
             }
             var disconnectedPeer = MasterPeer;
             masterPeer = null;
-            activeConnections.Remove(peer.EndPoint);
+            peers.Remove(peer.EndPoint);
             PeerDisconnected?.Invoke(disconnectedPeer);
         }
 
@@ -218,7 +221,7 @@ namespace Simulator.Network.Core.Connection
             if (MasterPeer!=null && Equals(endPoint.Address, MasterPeer.PeerEndPoint.Address))
                 Log.Error("[Client] Network error: " + socketError);
             else
-                activeConnections.Remove(endPoint);
+                peers.Remove(endPoint);
         }
 
         /// <inheritdoc/>
@@ -262,7 +265,7 @@ namespace Simulator.Network.Core.Connection
             }
 
             var identifier = request.Data.GetString();
-            var peerConnected = activeConnections.ContainsKey(request.RemoteEndPoint);
+            var peerConnected = peers.ContainsKey(request.RemoteEndPoint);
             if (peerConnected)
             {
                 //Connection to same peer is already established, probably request send from other sub-network

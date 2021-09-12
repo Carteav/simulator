@@ -13,7 +13,7 @@ public static class SensorDebugModeToggle
         SensorDebugModeToggle.enabled_ = EditorPrefs.GetBool(SensorDebugModeToggle.MENU_NAME, false);
         //SensorDebugModeToggle.enabled_ = Config.SensorDebugModeEnabled; // TODO why this not working?
         /// Set checkmark on menu item
-        Menu.SetChecked(SensorDebugModeToggle.MENU_NAME, Config.SensorDebugModeEnabled);
+        Menu.SetChecked(SensorDebugModeToggle.MENU_NAME, Config.DeveloperDebugModeEnabled);
 
         /// Delaying until first editor tick so that the menu
         /// will be populated before setting check state, and

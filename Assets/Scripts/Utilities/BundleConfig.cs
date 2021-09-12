@@ -20,6 +20,7 @@ namespace Simulator
             Controllable,
             NPC,
             Bridge,
+            Pedestrian,
         }
 
         public static Dictionary<BundleTypes, string> Versions = new Dictionary<BundleTypes, string>()

@@ -13,6 +13,7 @@ using Simulator.Web;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Text;
@@ -394,14 +395,12 @@ public class CloudAPI
     Uri CloudURL;
     Uri ProxyURL;
     string SimId;
-    Uri InstanceURL;
 
-    CancellationTokenSource requestTokenSource = new CancellationTokenSource();
     private const uint fetchLimit = 50;
     StreamReader onlineStream;
 
-    [NonSerialized]
-    public string CloudType;
+    // TODO: rename this property to something more appropritate
+    public string CloudType { get => CloudURL.AbsoluteUri; }
 
     public CloudAPI(Uri cloudURL, CookieContainer cookieContainer, Uri proxyURL = null)
     {
@@ -485,7 +484,7 @@ public class CloudAPI
         }
 
         var json = Newtonsoft.Json.JsonConvert.SerializeObject(simInfo, JsonSettings.camelCase);
-        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(InstanceURL, "/api/v1/clusters/connect"));
+        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(CloudURL, "/api/v1/clusters/connect"));
         message.Content = new StringContent(json, Encoding.UTF8, "application/json");
         message.Headers.Add("SimId", Config.SimID);
         message.Headers.Add("Accept", "application/json");
@@ -583,7 +582,7 @@ public class CloudAPI
         }
     }
 
-    public async Task<ApiModelType> GetApi<ApiModelType>(string routeAndParams) 
+    public async Task<ApiModelType> GetApi<ApiModelType>(string routeAndParams)
     {
         HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Get, new Uri(CloudURL, routeAndParams));
         if (!string.IsNullOrEmpty(SimId)) message.Headers.Add("SimId", SimId);
@@ -626,7 +625,7 @@ public class CloudAPI
 
     public async Task PostApi<ApiData>(string route, ApiData data)
     {
-        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(InstanceURL, route));
+        HttpRequestMessage message = new HttpRequestMessage(HttpMethod.Post, new Uri(CloudURL, route));
         message.Content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(data, JsonSettings.camelCase), Encoding.UTF8, "application/json");
         if (!string.IsNullOrEmpty(SimId)) message.Headers.Add("SimId", Config.SimID);
         message.Headers.Add("Accept", "application/json");
@@ -663,6 +662,9 @@ public class CloudAPI
         NetworkInterface[] intf = NetworkInterface.GetAllNetworkInterfaces();
         foreach (NetworkInterface device in intf)
         {
+            if (device.OperationalStatus != OperationalStatus.Up)
+                continue;
+            
             foreach (UnicastIPAddressInformation info in device.GetIPProperties().UnicastAddresses)
             {
                 string address = info.Address.ToString();

@@ -46,7 +46,12 @@ namespace Simulator.Sensors
 
         ImuData data;
         
-        public override SensorDistributionType DistributionType => SensorDistributionType.HighLoad;
+        public override SensorDistributionType DistributionType => SensorDistributionType.ClientOnly;
+
+        protected override void Deinitialize()
+        {
+            throw new NotImplementedException();
+        }
 
         public override void OnBridgeSetup(BridgeInstance bridge)
         {
@@ -67,6 +72,11 @@ namespace Simulator.Sensors
         void OnDestroy()
         {
             Destroyed = true;
+        }
+
+        protected override void Initialize()
+        {
+            throw new NotImplementedException();
         }
 
         void Publisher()

@@ -7,7 +7,7 @@
 
 namespace Simulator.PointCloud
 {
-    using UnityEngine;
+    using System.Linq;
     using UnityEngine.Rendering;
     using UnityEngine.Rendering.HighDefinition;
 
@@ -29,57 +29,19 @@ namespace Simulator.PointCloud
         protected override void Setup(ScriptableRenderContext renderContext, CommandBuffer cmd)
         {
             RenderPipeline.OnRenderShadowMap += RenderShadows;
+            RenderPipeline.OnRenderGBuffer += RenderLit;
             base.Setup(renderContext, cmd);
         }
 
-        private bool SkyPreRenderRequired()
-        {
-            // Unlit injection point has sky already rendered - skip
-            if (injectionPoint != PointCloudManager.LitInjectionPoint)
-                return false;
-
-            foreach (var pointCloudRenderer in pointCloudRenderers)
-            {
-                if ((pointCloudRenderer.Mask & PointCloudRenderer.RenderMask.Camera) != 0 &&
-                    pointCloudRenderer.SupportsLighting &&
-                    pointCloudRenderer.DebugBlendSky)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        protected override void Execute(ScriptableRenderContext renderContext, CommandBuffer cmd, HDCamera hdCamera,
-            CullingResults cullingResult)
+        protected override void Execute(CustomPassContext ctx)
         {
             if (pointCloudRenderers == null || pointCloudRenderers.Length == 0)
                 return;
 
-            var isLit = injectionPoint == PointCloudManager.LitInjectionPoint;
-
-            RenderTargetIdentifier[] rtIds;
-            
-            GetCameraBuffers(out var colorBuffer, out var depthBuffer);
-
-            if (isLit)
-            {
-                // This cannot be cached - GBuffer RTIs can change between frames
-                rtIds = RenderPipeline.GetGBuffersRTI(hdCamera);
-            }
+            if (rtiCache1 == null)
+                rtiCache1 = new[] {ctx.cameraColorBuffer.nameID};
             else
-            {
-                if (cachedTargetIdentifiers == null)
-                    cachedTargetIdentifiers = new[] {colorBuffer.nameID};
-                else
-                    cachedTargetIdentifiers[0] = colorBuffer.nameID;
-                
-                rtIds = cachedTargetIdentifiers;
-            }
-            
-            if (SkyPreRenderRequired())
-                RenderPipeline.ForceRenderSky(hdCamera, cmd);
+                rtiCache1[0] = ctx.cameraColorBuffer.nameID;
 
             var rendered = false;
 
@@ -160,9 +122,13 @@ namespace Simulator.PointCloud
         protected override void Cleanup()
         {
             if (RenderPipeline != null)
+            {
                 RenderPipeline.OnRenderShadowMap -= RenderShadows;
+                RenderPipeline.OnRenderGBuffer -= RenderLit;
+            }
+
             pointCloudRenderers = null;
-            
+
             base.Cleanup();
         }
     }

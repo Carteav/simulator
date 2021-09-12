@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 LG Electronics, Inc.
+ * Copyright (c) 2019-2021 LG Electronics, Inc.
  *
  * This software contains code licensed as described in LICENSE.
  *
@@ -125,6 +125,7 @@ public class UIManager : MonoBehaviour
     public Text LockedText;
     public Text UnlockedText;
     public Text CinematicText;
+    public Text DriverText;
     public Text CameraStateText;
 
     [Space(5, order = 0)]
@@ -314,16 +315,25 @@ public class UIManager : MonoBehaviour
                 LockedText.gameObject.SetActive(false);
                 UnlockedText.gameObject.SetActive(true);
                 CinematicText.gameObject.SetActive(false);
+                DriverText.gameObject.SetActive(false);
                 break;
             case CameraStateType.Follow:
                 LockedText.gameObject.SetActive(true);
                 UnlockedText.gameObject.SetActive(false);
                 CinematicText.gameObject.SetActive(false);
+                DriverText.gameObject.SetActive(false);
                 break;
             case CameraStateType.Cinematic:
                 LockedText.gameObject.SetActive(false);
                 UnlockedText.gameObject.SetActive(false);
                 CinematicText.gameObject.SetActive(true);
+                DriverText.gameObject.SetActive(false);
+                break;
+            case CameraStateType.Driver:
+                LockedText.gameObject.SetActive(false);
+                UnlockedText.gameObject.SetActive(false);
+                CinematicText.gameObject.SetActive(false);
+                DriverText.gameObject.SetActive(true);
                 break;
         }
     }
@@ -542,24 +552,24 @@ public class UIManager : MonoBehaviour
         //Detach from the current agent events
         if (CurrentAgent != null)
         {
-            var previousAgentController = CurrentAgent.GetComponent<AgentController>();
+            var previousAgentController = CurrentAgent.GetComponent<IAgentController>();
             if (previousAgentController != null)
                 previousAgentController.SensorsChanged -= AgentControllerOnSensorsChanged;
         }
 
         //Set new agent
         CurrentAgent = agent;
-        AgentController agentController = null;
+        IAgentController Controller = null;
                 
         //Attach to the new agent events
         if (CurrentAgent != null)
         {
-            agentController = CurrentAgent.GetComponent<AgentController>();
-            if (agentController != null)
-                agentController.SensorsChanged += AgentControllerOnSensorsChanged;
+            Controller = CurrentAgent.GetComponent<IAgentController>();
+            if (Controller != null)
+                Controller.SensorsChanged += AgentControllerOnSensorsChanged;
         }
 
-        AgentControllerOnSensorsChanged(agentController);
+        AgentControllerOnSensorsChanged(Controller);
         AgentDropdown.value = SimulatorManager.Instance.AgentManager.GetCurrentActiveAgentIndex();
     }
 
@@ -577,7 +587,7 @@ public class UIManager : MonoBehaviour
         visualizers.Clear();
     }
 
-    private void AgentControllerOnSensorsChanged(AgentController agentController)
+    private void AgentControllerOnSensorsChanged(IAgentController agentController)
     {
         ClearVisualizers();
         
@@ -585,10 +595,10 @@ public class UIManager : MonoBehaviour
         if (agentController != null)
         {
             VisualizerGridLayoutGroup.enabled = true;
-            Array.ForEach(agentController.GetComponentsInChildren<SensorBase>(), sensor => { AddVisualizer(sensor); });
+            Array.ForEach(agentController.AgentGameObject.GetComponentsInChildren<SensorBase>(), sensor => { AddVisualizer(sensor); });
             VisualizerGridLayoutGroup.enabled = false;
+            SetAgentBridgeInfo(agentController.AgentGameObject);
         }
-        SetAgentBridgeInfo(agentController.gameObject);
     }
 
     private void SetCurrentPanel()

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 LG Electronics, Inc.
+ * Copyright (c) 2019-2021 LG Electronics, Inc.
  *
  * This software contains code licensed as described in LICENSE.
  *
@@ -18,18 +18,14 @@ using Simulator.Network.Core.Messaging.Data;
 using UnityEngine;
 using UnityEngine.VFX;
 
-public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
+public class VehicleActions : MonoBehaviour, IVehicleActions, IMessageSender, IMessageReceiver
 {
     public Texture lowCookie;
     public Texture highCookie;
 
-    private AgentController agentController;
+    private bool isInitialized;
+    private IAgentController Controller;
     private Rigidbody RB;
-
-    [HideInInspector]
-    public Bounds Bounds;
-    [HideInInspector]
-    public List<Transform> CinematicCameraTransforms = new List<Transform>();
 
     private Renderer headLightRenderer;
     private Renderer brakeLightRenderer;
@@ -51,6 +47,8 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         public WheelCollider wheelCollider;
         public VisualEffect visualEffect;
     };
+
+    private float tireSpraySpawnRate;
     private List<TireSprayData> TireSprayDatas = new List<TireSprayData>();
     private WheelHit WheelColliderHit;
     private Quaternion WheelColliderRot;
@@ -59,16 +57,15 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
     //Network
     private MessagesManager messagesManager;
     private string key;
-    public string Key => key ?? (key = $"{HierarchyUtilities.GetPath(transform)}VehicleActions");
+    public string Key => key ??= $"{HierarchyUtilities.GetPath(transform)}VehicleActions";
     
-    public enum HeadLightState { OFF = 0, LOW = 1, HIGH = 2 };
     private HeadLightState _currentHeadLightState = HeadLightState.OFF;
     public HeadLightState CurrentHeadLightState
     {
         get => _currentHeadLightState;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
             _currentHeadLightState = value;
@@ -79,67 +76,66 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
                     headLights.ForEach(x => x.intensity = 0f);
                     if (headLightRenderer != null)
                     {
-                        headLightRenderer.material.SetFloat("_EmitIntensity", 0);
+                        headLightRenderer.material.SetFloat("_EmitIntensity", 0f);
                     }
                     break;
                 case HeadLightState.LOW:
                     headLights.ForEach(x => x.enabled = true);
-                    headLights.ForEach(x => x.intensity = 250f);
+                    headLights.ForEach(x => x.intensity = 1500f);
                     if (lowCookie != null)
                     {
                         headLights.ForEach(x => x.cookie = lowCookie);
                     }
                     if (headLightRenderer != null)
                     {
-                        headLightRenderer.material.SetFloat("_EmitIntensity", 4);
+                        headLightRenderer.material.SetFloat("_EmitIntensity", 15f);
                     }
                     break;
                 case HeadLightState.HIGH:
                     headLights.ForEach(x => x.enabled = true);
-                    headLights.ForEach(x => x.intensity = 500f);
+                    headLights.ForEach(x => x.intensity = 2500f);
                     if (highCookie != null)
                     {
                         headLights.ForEach(x => x.cookie = highCookie);
                     }
                     if (headLightRenderer != null)
                     {
-                        headLightRenderer.material.SetFloat("_EmitIntensity", 12);
+                        headLightRenderer.material.SetFloat("_EmitIntensity", 30f);
                     }
                     break;
             }
 
-            if (Loader.Instance.Network.IsMaster)
+            if (isInitialized && Loader.Instance.Network.IsMaster)
             {
                 var message = MessagesPool.Instance.GetMessage(8);
                 message.AddressKey = Key;
                 message.Content.PushEnum<HeadLightState>((int)value);
                 message.Content.PushEnum<VehicleActionsPropertyName>((int)VehicleActionsPropertyName.CurrentHeadLightState);
                 message.Type = DistributedMessageType.ReliableOrdered;
-                BroadcastMessage(message);
+                ((IMessageSender) this).BroadcastMessage(message);
             }
         }
     }
 
-    public enum WiperState { OFF = 0, LOW = 1, MED = 2, HIGH = 3 };
     private WiperState _currentWiperState = WiperState.OFF;
     public WiperState CurrentWiperState
     {
         get => _currentWiperState;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
             _currentWiperState = value;
 
-            if (Loader.Instance.Network.IsMaster)
+            if (isInitialized && Loader.Instance.Network.IsMaster)
             {
                 var message = MessagesPool.Instance.GetMessage(8);
                 message.AddressKey = Key;
                 message.Content.PushEnum<WiperState>((int)value);
                 message.Content.PushEnum<VehicleActionsPropertyName>((int)VehicleActionsPropertyName.CurrentWiperState);
                 message.Type = DistributedMessageType.ReliableOrdered;
-                BroadcastMessage(message);
+                ((IMessageSender) this).BroadcastMessage(message);
             }
         }
     }
@@ -150,14 +146,15 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _leftTurnSignal;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
+            var valueChanged = _leftTurnSignal != value;
             _leftTurnSignal = value;
             _rightTurnSignal = _hazardLights = false;
             StartIndicatorLeftStatus();
             
-            if (Loader.Instance.Network.IsMaster)
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.LeftTurnSignal, value);
         }
     }
@@ -168,14 +165,15 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _rightTurnSignal;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
+            var valueChanged = _rightTurnSignal != value;
             _rightTurnSignal = value;
             _leftTurnSignal = _hazardLights = false;
             StartIndicatorRightStatus();
             
-            if (Loader.Instance.Network.IsMaster)
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.RightTurnSignal, value);
         }
     }
@@ -186,14 +184,15 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _hazardLights;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
+            var valueChanged = _hazardLights != value;
             _hazardLights = value;
             _leftTurnSignal = _rightTurnSignal = false;
             StartIndicatorHazardStatus();
             
-            if (Loader.Instance.Network.IsMaster)
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.HazardLights, value);
         }
     }
@@ -204,26 +203,28 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _brakeLights;
         set
         {
+            var valueChanged = _brakeLights != value;
             _brakeLights = value;
             switch (_currentHeadLightState)
             {
                 case HeadLightState.OFF:
                     if (brakeLightRenderer != null)
                     {
-                        brakeLights.ForEach(x => x.intensity = _brakeLights ? 3f : 0f);
-                        brakeLightRenderer.material.SetFloat("_EmitIntensity", _brakeLights ? 3 : 0);
+                        brakeLights.ForEach(x => x.intensity = _brakeLights ? 400f : 0f);
+                        brakeLightRenderer.material.SetFloat("_EmitIntensity", _brakeLights ? 8f : 0f);
                     }
                     break;
                 case HeadLightState.LOW:
                 case HeadLightState.HIGH:
                     if (brakeLightRenderer != null)
                     {
-                        brakeLights.ForEach(x => x.intensity = _brakeLights ? 3f : 1f);
-                        brakeLightRenderer.material.SetFloat("_EmitIntensity", _brakeLights ? 3 : 1.1f);
+                        brakeLights.ForEach(x => x.intensity = _brakeLights ? 400f : 80f);
+                        brakeLightRenderer.material.SetFloat("_EmitIntensity", _brakeLights ? 8f : 2f);
                     }
                     break;
             }
-            if (Loader.Instance.Network.IsMaster)
+            
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.BrakeLights, value);
         }
     }
@@ -234,16 +235,19 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _fogLights;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
+            var valueChanged = _fogLights != value;
             _fogLights = value;
             fogLights.ForEach(x => x.enabled = _fogLights);
+            fogLights.ForEach(x => x.intensity = _fogLights ? 300f : 0f);
             if (fogLightRenderer != null)
             {
-                fogLightRenderer.material.SetFloat("_EmitIntensity", _fogLights ? 3f : 0f);
+                fogLightRenderer.material.SetFloat("_EmitIntensity", _fogLights ? 10f : 0f);
             }
-            if (Loader.Instance.Network.IsMaster)
+            
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.FogLights, value);
         }
     }
@@ -254,13 +258,16 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _reverseLights;
         set
         {
+            var valueChanged = _reverseLights != value;
             _reverseLights = value;
             indicatorReverseLights.ForEach(x => x.enabled = _reverseLights);
+            indicatorReverseLights.ForEach(x => x.intensity = _reverseLights ? 400f : 0f);
             if (indicatorReverseLightRenderer != null)
             {
-                indicatorReverseLightRenderer.material.SetFloat("_EmitIntensity", _reverseLights ? 2 : 0);
+                indicatorReverseLightRenderer.material.SetFloat("_EmitIntensity", _reverseLights ? 6f : 0f);
             }
-            if (Loader.Instance.Network.IsMaster)
+            
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.ReverseLights, value);
         }
     }
@@ -271,13 +278,14 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         get => _interiorLights;
         set
         {
-            if (!agentController.Active && !Loader.Instance.Network.IsClient)
+            if (!Controller.Active && !Loader.Instance.Network.IsClient)
                 return;
 
+            var valueChanged = _interiorLights != value;
             _interiorLights = value;
             interiorLights.ForEach(x => x.enabled = _interiorLights);
             
-            if (Loader.Instance.Network.IsMaster)
+            if (valueChanged)
                 BroadcastProperty(VehicleActionsPropertyName.InteriorLight, value);
         }
     }
@@ -293,14 +301,25 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
 
     private void Start()
     {
+        Initialize();
+    }
+
+    private void Initialize()
+    {
+        if (isInitialized)
+            return;
+        
         messagesManager = Loader.Instance.Network.MessagesManager;
         messagesManager?.RegisterObject(this);
         RB = GetComponent<Rigidbody>();
         EnviroManager = SimulatorManager.Instance.EnvironmentEffectsManager;
+        isInitialized = true;
+        BroadcastStateSnapshot();
     }
 
     private void Update()
     {
+        //Update visual effects transform
         foreach (var item in TireSprayDatas)
         {
             if (item.wheelCollider.GetGroundHit(out WheelColliderHit))
@@ -308,52 +327,73 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
                 item.visualEffect.transform.position = WheelColliderHit.point;
                 item.wheelCollider.GetWorldPose(out var pos, out WheelColliderRot);
                 item.visualEffect.transform.rotation = WheelColliderRot;
-                if (EnviroManager != null)
-                {
-                    if (RB != null)
-                    {
-                        var localVel = transform.InverseTransformDirection(RB.velocity);
-                        var lerp = 0f;
-
-                        if (EnviroManager.Wet <= 0.25)
-                        {
-                            item.visualEffect.SetFloat("_SpawnRate", 0);
-                        }
-                        else if (EnviroManager.Wet > 0.25 && EnviroManager.Wet <= 0.5)
-                        {
-                            lerp = localVel.z > 0 ? Mathf.InverseLerp(0, 100, localVel.z) : 0f;
-                            item.visualEffect.SetFloat("_SpawnRate", lerp);
-                        }
-                        else if (EnviroManager.Wet > 0.5 && EnviroManager.Wet <= 0.75)
-                        {
-                            lerp = localVel.z > 0 ? Mathf.InverseLerp(0, 75, localVel.z) : 0f;
-                            item.visualEffect.SetFloat("_SpawnRate", lerp);
-                        }
-                        else if (EnviroManager.Wet > 0.75 && EnviroManager.Wet <= 1)
-                        {
-                            lerp = localVel.z > 0 ? Mathf.InverseLerp(0, 25, localVel.z) : 0f;
-                            item.visualEffect.SetFloat("_SpawnRate", lerp);
-                        }
-                    }
-                }
             }
         }
+
+        //Update visual effects spawn rate
+        if (EnviroManager != null && RB != null)
+        {
+            var localVel = transform.InverseTransformDirection(RB.velocity);
+            var lerp = 0f;
+
+            if (EnviroManager.Wet <= 0.25f)
+            {
+                SetTireSpraySpawnRate(0.0f);
+            }
+            else if (EnviroManager.Wet > 0.25f && EnviroManager.Wet <= 0.5f)
+            {
+                lerp = localVel.z > 0.0f ? Mathf.InverseLerp(0.0f, 100.0f, localVel.z) : 0.0f;
+                SetTireSpraySpawnRate(lerp);
+            }
+            else if (EnviroManager.Wet > 0.5f && EnviroManager.Wet <= 0.75f)
+            {
+                lerp = localVel.z > 0.0f ? Mathf.InverseLerp(0.0f, 75.0f, localVel.z) : 0.0f;
+                SetTireSpraySpawnRate(lerp);
+            }
+            else if (EnviroManager.Wet > 0.75f && EnviroManager.Wet <= 1.0f)
+            {
+                lerp = localVel.z > 0.0f ? Mathf.InverseLerp(0.0f, 25.0f, localVel.z) : 0.0f;
+                SetTireSpraySpawnRate(lerp);
+            }
+        }
+    }
+
+    private void SetTireSpraySpawnRate(float spawnRate, bool forceSet = false)
+    {
+        if (!forceSet && Mathf.Approximately(spawnRate, tireSpraySpawnRate))
+            return;
+        
+        tireSpraySpawnRate = spawnRate;
+        foreach (var item in TireSprayDatas)
+        {
+            item.visualEffect.SetFloat("_SpawnRate", spawnRate);
+        }
+        BroadcastProperty(VehicleActionsPropertyName.TireSpraySpawnRate, spawnRate);
     }
 
     private void OnDestroy()
     {
         StopAllCoroutines();
+        Deinitialize();
+    }
+
+    private void Deinitialize()
+    {
+        if (!isInitialized)
+            return;
+        
         messagesManager?.UnregisterObject(this);
+        isInitialized = false;
     }
 
     private void SetNeededComponents()
     {
         var dynamics = GetComponent<VehicleSMI>();
-        agentController = GetComponent<AgentController>();
+        Controller = GetComponent<IAgentController>();
         var allRenderers = GetComponentsInChildren<Renderer>(true);
         var animators = GetComponentsInChildren<Animator>(true); // TODO wipers doors windows
 
-        Bounds = new Bounds(transform.position, Vector3.zero);
+        var bounds = new Bounds(transform.position, Vector3.zero);
         foreach (Renderer child in allRenderers)
         {
             if (child.name == "HeadLights")
@@ -404,17 +444,20 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
                     fogLightRenderer.material.SetFloat("_EmitIntensity", 0f);
                 }
             }
-            Bounds.Encapsulate(child.bounds);
+            bounds.Encapsulate(child.bounds);
         }
 
+        Controller.Bounds = bounds;
+
         CreateCinematicTransforms();
+        CreateDriverViewTransform();
 
         // GroundTruth Box Collider
         var gtBox = new GameObject("GroundTruthBox");
         var gtBoxCollider = gtBox.AddComponent<BoxCollider>();
         gtBoxCollider.isTrigger = true;
-        gtBoxCollider.size = Bounds.size;
-        gtBoxCollider.center = new Vector3(gtBoxCollider.center.x, Bounds.size.y / 2, gtBoxCollider.center.z);
+        gtBoxCollider.size = bounds.size;
+        gtBoxCollider.center = new Vector3(gtBoxCollider.center.x, bounds.size.y / 2, gtBoxCollider.center.z);
         gtBox.transform.parent = transform;
         gtBox.layer = LayerMask.NameToLayer("GroundTruth");
 
@@ -450,56 +493,85 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         foreach (var col in wheelColliders)
         {
             var effect = Instantiate(SimulatorManager.Instance.EnvironmentEffectsManager.TireSprayPrefab,
-                                     col.transform.position + new Vector3(0f, -col.radius, 0f),
-                                     Quaternion.identity).GetComponent<VisualEffect>();
+                col.transform.position + new Vector3(0f, -col.radius, 0f),
+                Quaternion.identity).GetComponent<VisualEffect>();
             effect.transform.SetParent(transform);
-            TireSprayDatas.Add(new TireSprayData { wheelCollider = col, visualEffect = effect });
+            TireSprayDatas.Add(new TireSprayData {wheelCollider = col, visualEffect = effect});
         }
+        SetTireSpraySpawnRate(0.0f, true);
     }
 
     private void CreateCinematicTransforms()
     {
+        var bound = Controller.Bounds;
         var cinematicT = new GameObject("CenterFront").transform;
-        cinematicT.position = new Vector3(Bounds.center.x, Bounds.min.y + 1f, Bounds.center.z + Bounds.max.z * 2);
+        cinematicT.position = new Vector3(bound.center.x, bound.min.y + 1f, bound.center.z + bound.max.z * 2);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center);
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center);
+        Controller.CinematicCameraTransforms.Add(cinematicT);
         cinematicT = new GameObject("CenterTop").transform;
-        cinematicT.position = new Vector3(Bounds.center.x, Bounds.max.y * 10f, Bounds.center.z);
+        cinematicT.position = new Vector3(bound.center.x, bound.max.y * 10f, bound.center.z);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center);
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center);
+        Controller.CinematicCameraTransforms.Add(cinematicT);
         cinematicT = new GameObject("RightFront").transform;
-        cinematicT.position = new Vector3(Bounds.center.x + Bounds.max.x + 1f, Bounds.min.y + 0.5f, Bounds.center.z + Bounds.max.z);
+        cinematicT.position = new Vector3(bound.center.x + bound.max.x + 1f, bound.min.y + 0.5f, bound.center.z + bound.max.z);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center + new Vector3(0f, 0.25f, 0f));
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center + new Vector3(0f, 0.25f, 0f));
+        Controller.CinematicCameraTransforms.Add(cinematicT);
         cinematicT = new GameObject("LeftFront").transform;
-        cinematicT.position = new Vector3(Bounds.center.x - Bounds.max.x - 1f, Bounds.min.y + 0.5f, Bounds.center.z + Bounds.max.z);
+        cinematicT.position = new Vector3(bound.center.x - bound.max.x - 1f, bound.min.y + 0.5f, bound.center.z + bound.max.z);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center + new Vector3(0f, 0.25f, 0f));
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center + new Vector3(0f, 0.25f, 0f));
+        Controller.CinematicCameraTransforms.Add(cinematicT);
         cinematicT = new GameObject("RightBack").transform;
-        cinematicT.position = new Vector3(Bounds.center.x + Bounds.max.x + 1f, Bounds.min.y + 0.5f, Bounds.center.z - Bounds.max.z);
+        cinematicT.position = new Vector3(bound.center.x + bound.max.x + 1f, bound.min.y + 0.5f, bound.center.z - bound.max.z);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center + new Vector3(0f, 0.25f, 0f));
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center + new Vector3(0f, 0.25f, 0f));
+        Controller.CinematicCameraTransforms.Add(cinematicT);
         cinematicT = new GameObject("LeftBack").transform;
-        cinematicT.position = new Vector3(Bounds.center.x - Bounds.max.x - 1f, Bounds.min.y + 0.5f, Bounds.center.z - Bounds.max.z);
+        cinematicT.position = new Vector3(bound.center.x - bound.max.x - 1f, bound.min.y + 0.5f, bound.center.z - bound.max.z);
         cinematicT.SetParent(transform, true);
-        cinematicT.LookAt(Bounds.center + new Vector3(0f, 0.25f, 0f));
-        CinematicCameraTransforms.Add(cinematicT);
+        cinematicT.LookAt(bound.center + new Vector3(0f, 0.25f, 0f));
+        Controller.CinematicCameraTransforms.Add(cinematicT);
+    }
+
+    private void CreateDriverViewTransform()
+    {
+        if (Controller.DriverViewTransform != null)
+        {
+            return;
+        }
+
+        var bounds = Controller.Bounds;
+        var origin = new Vector3(bounds.center.x, bounds.max.y * 2f, bounds.center.z + bounds.max.z / 4f);
+        var direction = Vector3.down * 10f;
+
+        var view = new GameObject("DriverView").transform;
+        view.position = origin;
+        view.rotation = Quaternion.identity;
+
+        if (Physics.Raycast(origin, direction, out RaycastHit hit, 10f, LayerMask.GetMask("Agent")))
+        {
+            view.position = hit.point;
+        }
+
+        view.SetParent(transform, true);
+        Controller.DriverViewTransform = view;
     }
 
     public void IncrementHeadLightState()
     {
         CurrentHeadLightState = (int)CurrentHeadLightState == System.Enum.GetValues(typeof(HeadLightState)).Length - 1 ? HeadLightState.OFF : CurrentHeadLightState + 1;
     }
-    
+
     private void StartIndicatorLeftStatus()
     {
         if (indicatorLeftIE != null)
+        {
             StopCoroutine(indicatorLeftIE);
+        }
+
         indicatorLeftIE = RunIndicatorLeftStatus();
         StartCoroutine(indicatorLeftIE);
     }
@@ -513,19 +585,27 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
             SetIndicatorLeftLights(false);
             yield return new WaitForSeconds(0.5f);
         }
+
         SetIndicatorLeftLights(false);
     }
 
     private void SetIndicatorLeftLights(bool state)
     {
-        indicatorLeftLightRenderer.material.SetFloat("_EmitIntensity", state ? 2 : 0);
         indicatorLeftLights.ForEach(x => x.enabled = state);
+        indicatorLeftLights.ForEach(x => x.intensity = state ? 200f : 0f);
+        if (indicatorLeftLightRenderer != null)
+        {
+            indicatorLeftLightRenderer.material.SetFloat("_EmitIntensity", state ? 6f : 0f);
+        }
     }
     
     private void StartIndicatorRightStatus()
     {
         if (indicatorRightIE != null)
+        {
             StopCoroutine(indicatorRightIE);
+        }
+
         indicatorRightIE = RunIndicatorRightStatus();
         StartCoroutine(indicatorRightIE);
     }
@@ -539,19 +619,27 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
             SetIndicatorRightLights(false);
             yield return new WaitForSeconds(0.5f);
         }
+
         SetIndicatorRightLights(false);
     }
 
     private void SetIndicatorRightLights(bool state)
     {
-        indicatorRightLightRenderer.material.SetFloat("_EmitIntensity", state ? 2 : 0);
         indicatorRightLights.ForEach(x => x.enabled = state);
+        indicatorRightLights.ForEach(x => x.intensity = state ? 200f : 0f);
+        if (indicatorRightLightRenderer != null)
+        {
+            indicatorRightLightRenderer.material.SetFloat("_EmitIntensity", state ? 6f : 0f);
+        }
     }
 
     private void StartIndicatorHazardStatus()
     {
         if (indicatorHazardIE != null)
+        {
             StopCoroutine(indicatorHazardIE);
+        }
+
         indicatorHazardIE = RunIndicatorHazardStatus();
         StartCoroutine(indicatorHazardIE);
     }
@@ -565,15 +653,25 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
             SetIndicatorHazardLights(false);
             yield return new WaitForSeconds(0.5f);
         }
+
         SetIndicatorHazardLights(false);
     }
 
     private void SetIndicatorHazardLights(bool state)
     {
-        indicatorLeftLightRenderer.material.SetFloat("_EmitIntensity", state ? 2 : 0);
         indicatorLeftLights.ForEach(x => x.enabled = state);
-        indicatorRightLightRenderer.material.SetFloat("_EmitIntensity", state ? 2 : 0);
+        indicatorLeftLights.ForEach(x => x.intensity = state ? 200f : 0f);
+        if (indicatorLeftLightRenderer != null)
+        {
+            indicatorLeftLightRenderer.material.SetFloat("_EmitIntensity", state ? 6f : 0f);
+        }
+
         indicatorRightLights.ForEach(x => x.enabled = state);
+        indicatorRightLights.ForEach(x => x.intensity = state ? 200f : 0f);
+        if (indicatorRightLightRenderer != null)
+        {
+            indicatorRightLightRenderer.material.SetFloat("_EmitIntensity", state ? 6f : 0f);
+        }
     }
 
     public void IncrementWiperState()
@@ -581,16 +679,56 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
         CurrentWiperState = (int)CurrentWiperState == System.Enum.GetValues(typeof(WiperState)).Length - 1 ? WiperState.OFF : CurrentWiperState + 1;
     }
     
+#region network
+    /// <summary>
+    /// Broadcasts current vehicle actions state snapshot
+    /// </summary>
+    private void BroadcastStateSnapshot()
+    {
+        if (!isInitialized || !Loader.Instance.Network.IsMaster)
+            return;
+
+        var message = MessagesPool.Instance.GetMessage();
+        message.AddressKey = Key;
+        message.Content.PushFloat(tireSpraySpawnRate);
+        message.Content.PushBool(_interiorLights);
+        message.Content.PushBool(_reverseLights);
+        message.Content.PushBool(_fogLights);
+        message.Content.PushBool(_brakeLights);
+        message.Content.PushBool(_hazardLights);
+        message.Content.PushBool(_rightTurnSignal);
+        message.Content.PushBool(_leftTurnSignal);
+        message.Content.PushEnum<WiperState>((int)_currentWiperState);
+        message.Content.PushEnum<HeadLightState>((int)_currentHeadLightState);
+        message.Content.PushEnum<VehicleActionsPropertyName>((int)VehicleActionsPropertyName.StateSnapshot);
+        message.Type = DistributedMessageType.ReliableOrdered;
+        ((IMessageSender) this).BroadcastMessage(message);
+    }
+
     /// <inheritdoc/>
-    public void ReceiveMessage(IPeerManager sender, DistributedMessage distributedMessage)
+    void IMessageReceiver.ReceiveMessage(IPeerManager sender, DistributedMessage distributedMessage)
     {
         //Ignore messages if this component is marked as destroyed
         if (this == null)
+        {
             return;
-        
+        }
+
         var propertyName = distributedMessage.Content.PopEnum<VehicleActionsPropertyName>();
         switch (propertyName)
         {
+            case VehicleActionsPropertyName.StateSnapshot:
+                CurrentHeadLightState = distributedMessage.Content.PopEnum<HeadLightState>();
+                CurrentWiperState = distributedMessage.Content.PopEnum<WiperState>();
+                LeftTurnSignal = distributedMessage.Content.PopBool();
+                RightTurnSignal = distributedMessage.Content.PopBool();
+                HazardLights = distributedMessage.Content.PopBool();
+                BrakeLights = distributedMessage.Content.PopBool();
+                FogLights = distributedMessage.Content.PopBool();
+                ReverseLights = distributedMessage.Content.PopBool();
+                InteriorLight = distributedMessage.Content.PopBool();
+                SetTireSpraySpawnRate(distributedMessage.Content.PopFloat());
+                break;
             case VehicleActionsPropertyName.CurrentHeadLightState:
                 CurrentHeadLightState = distributedMessage.Content.PopEnum<HeadLightState>();
                 break;
@@ -618,23 +756,30 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
             case VehicleActionsPropertyName.InteriorLight:
                 InteriorLight = distributedMessage.Content.PopBool();
                 break;
+            case VehicleActionsPropertyName.TireSpraySpawnRate:
+                SetTireSpraySpawnRate(distributedMessage.Content.PopFloat());
+                break;
             default:
                 throw new ArgumentOutOfRangeException();
         }
     }
 
     /// <inheritdoc/>
-    public void UnicastMessage(IPEndPoint endPoint, DistributedMessage distributedMessage)
+    void IMessageSender.UnicastMessage(IPEndPoint endPoint, DistributedMessage distributedMessage)
     {
         if (Key != null)
+        {
             messagesManager?.UnicastMessage(endPoint, distributedMessage);
+        }
     }
 
     /// <inheritdoc/>
-    public void BroadcastMessage(DistributedMessage distributedMessage)
+    void IMessageSender.BroadcastMessage(DistributedMessage distributedMessage)
     {
         if (Key != null)
+        {
             messagesManager?.BroadcastMessage(distributedMessage);
+        }
     }
 
     /// <inheritdoc/>
@@ -645,24 +790,43 @@ public class VehicleActions : MonoBehaviour, IMessageSender, IMessageReceiver
 
     private void BroadcastProperty(VehicleActionsPropertyName propertyName, bool value)
     {
+        if (!isInitialized || !Loader.Instance.Network.IsMaster)
+            return;
+
         var message = MessagesPool.Instance.GetMessage(5);
         message.AddressKey = Key;
         message.Content.PushBool(value);
         message.Content.PushEnum<VehicleActionsPropertyName>((int)propertyName);
         message.Type = DistributedMessageType.ReliableOrdered;
-        BroadcastMessage(message);
+        ((IMessageSender) this).BroadcastMessage(message);
+    }
+
+    private void BroadcastProperty(VehicleActionsPropertyName propertyName, float value)
+    {
+        if (!isInitialized || !Loader.Instance.Network.IsMaster)
+            return;
+        
+        var message = MessagesPool.Instance.GetMessage(5);
+        message.AddressKey = Key;
+        message.Content.PushFloat(value);
+        message.Content.PushEnum<VehicleActionsPropertyName>((int)propertyName);
+        message.Type = DistributedMessageType.ReliableOrdered;
+        ((IMessageSender) this).BroadcastMessage(message);
     }
 
     private enum VehicleActionsPropertyName
     {
-        CurrentHeadLightState = 0,
-        CurrentWiperState = 1,
-        LeftTurnSignal = 2,
-        RightTurnSignal = 3,
-        HazardLights = 4,
-        BrakeLights = 5,
-        FogLights = 6,
-        ReverseLights = 7,
-        InteriorLight = 8,
+        StateSnapshot = 0,
+        CurrentHeadLightState = 1,
+        CurrentWiperState = 2,
+        LeftTurnSignal = 3,
+        RightTurnSignal = 4,
+        HazardLights = 5,
+        BrakeLights = 6,
+        FogLights = 7,
+        ReverseLights = 8,
+        InteriorLight = 9,
+        TireSpraySpawnRate = 10
     }
+#endregion
 }

@@ -481,7 +481,7 @@ namespace Simulator.Sensors
             base.Update();
         }
 
-        public override void Init()
+        protected override void Initialize()
         {
             RuntimeSettings.Instance.LidarComputeShader = customLidarComputeShader;
 
@@ -490,7 +490,7 @@ namespace Simulator.Sensors
             LoadFileAngleData();
             FindMinMaxAngles();
 
-            base.Init();
+            base.Initialize();
         }
 
         private void CustomDispatch(CommandBuffer cmd, ReadRequest req, int kernel)

@@ -36,6 +36,7 @@ namespace Simulator.Network.Shared
         
         public class Stop
         {
+            public string SimulationId { get; set; }
         }
         
         public class EnvironmentState
@@ -44,6 +45,7 @@ namespace Simulator.Network.Shared
             public float Rain { get; set; }
             public float Wet { get; set; }
             public float Cloud { get; set; }
+            public float Damage { get; set; }
             public float TimeOfDay { get; set; }
         }
 

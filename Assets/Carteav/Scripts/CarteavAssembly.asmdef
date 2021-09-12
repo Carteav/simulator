@@ -1,10 +1,11 @@
 {
     "name": "CarteavAssembly",
+    "rootNamespace": "",
     "references": [
         "GUID:43bb230cc5d89654fb9c4da20660d5b4",
         "GUID:8c14360cd7563c841b92a26bfe7df07f",
-        "GUID:fb254b4137a280342aa5b17695020ac0",
-        "GUID:45f681528d86b6c41b791e85f15970bc"
+        "GUID:45f681528d86b6c41b791e85f15970bc",
+        "GUID:76dd2468be63a2f4c92b1bfffe8c082f"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

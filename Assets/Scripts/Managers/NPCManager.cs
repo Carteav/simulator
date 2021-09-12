@@ -36,6 +36,7 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
         [NPCSizeType.Bus]           = 1,
         [NPCSizeType.Trailer]       = 0,
         [NPCSizeType.Motorcycle]    = 1,
+        [NPCSizeType.Bicycle]       = 1,
     };
 
     [System.Serializable]
@@ -96,8 +97,29 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
     private Ray TestRay;
     private RaycastHit[] RayCastHits = new RaycastHit[1];
 
+    public delegate void SpawnCallbackType(NPCController controller);
+    List<SpawnCallbackType> SpawnCallbacks = new List<SpawnCallbackType>();
+
     public delegate void DespawnCallbackType(NPCController controller);
     List<DespawnCallbackType> DespawnCallbacks = new List<DespawnCallbackType>();
+
+    public void RegisterSpawnCallback(SpawnCallbackType callback)
+    {
+        SpawnCallbacks.Add(callback);
+    }
+
+    public void DeregisterSpawnCallback(SpawnCallbackType callback)
+    {
+        if (!SpawnCallbacks.Remove(callback))
+        {
+            Debug.LogWarning("Error in DeregisterDespawnCallback. " + callback + " is not registered before.");
+        }
+    }
+
+    public void ClearSpawnCallbacks()
+    {
+        SpawnCallbacks.Clear();
+    }
 
     public void RegisterDespawnCallback(DespawnCallbackType callback)
     {
@@ -135,6 +157,12 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
         InitSpawn = true;
 
         NPCVehicles.Clear();
+
+        if (Loader.Instance.CurrentSimulation == null)
+        {
+            return;
+        }
+
         if (Loader.Instance.CurrentSimulation.NPCs == null)
         {
             Loader.Instance.CurrentSimulation.NPCs = Simulator.Web.Config.NPCVehicles.Values.ToArray();
@@ -243,6 +271,11 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
             ClusterSimulationUtilities.AddDistributedComponents(go);
         }
 
+        foreach (var callback in SpawnCallbacks)
+        {
+            callback(NPCController);
+        }
+
         return NPCController;
     }
 
@@ -262,14 +295,13 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
         CurrentPooledNPCs.Clear();
         ActiveNPCCount = 0;
 
-        int poolCount = Mathf.FloorToInt(NPCMaxCount + (NPCMaxCount * 0.1f));
-        for (int i = 0; i < poolCount; i++)
+        for (int i = 0; i < NPCMaxCount; i++)
         {
             var template = GetWeightedRandomNPC();
             if (template == null)
             {
-                Debug.LogError("NPC size weights are incorrectly set!"); // TODO change to while with timer to make sure poolCount is reached
-                continue;
+                Debug.LogWarning("NPC size weights are incorrect, pooling stopped");
+                return null;
             }
             var spawnData = new NPCSpawnData
             {
@@ -415,6 +447,7 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
 
         CurrentPooledNPCs.Clear();
         ClearDespawnCallbacks();
+        ClearSpawnCallbacks();
     }
 
     private string GetNPCLabel(string npc_name)
@@ -447,6 +480,12 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
 
     private NPCAssetData GetWeightedRandomNPC()
     {
+        if (NPCVehicles.Count == 0)
+        {
+            Debug.LogWarning("NPC count is 0, please clone and build npcs");
+            return null;
+        }
+
         int totalWeight = NPCVehicles.Where(npc => HasSizeFlag(npc.NPCType)).Sum(npc => GetNPCFrequencyWeight(npc.NPCType));
         int rnd = RandomGenerator.Next(totalWeight);
 
@@ -527,11 +566,25 @@ public class NPCManager : MonoBehaviour, IMessageSender, IMessageReceiver
 
     private void SpawnNPCMock(DistributedMessage message)
     {
+        var active = message.Content.PopBool();
+        var genId = message.Content.PopString();
+        var templateId = message.Content.PopInt(2);
+        if (templateId < 0)
+        {
+            Debug.LogError("NPCManager received an invalid NPC template id. NPC mock cannot be spawned.");
+            return;
+        }
+        if (templateId >= NPCVehicles.Count)
+        {
+            Debug.LogError("NPCManager received an invalid NPC template id. NPC mock cannot be spawned. Make sure that every cluster machine uses the same NPCs list.");
+            return;
+        }
+        
         var data = new NPCSpawnData()
         {
-            Active = message.Content.PopBool(),
-            GenId = message.Content.PopString(),
-            Template = NPCVehicles[message.Content.PopInt(2)],
+            Active = active,
+            GenId = genId,
+            Template = NPCVehicles[templateId],
             Seed = message.Content.PopInt(),
             Color = message.Content.PopDecompressedColor(1),
             Position = message.Content.PopDecompressedPosition(),

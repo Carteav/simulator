@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 LG Electronics, Inc.
+ * Copyright (c) 2019-2021 LG Electronics, Inc.
  *
  * This software contains code licensed as described in LICENSE.
  *
@@ -7,6 +7,7 @@
 
 using System;
 using System.Collections.Generic;
+using LiteNetLib.Utils;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.HighDefinition;
@@ -149,18 +150,21 @@ public class EnvironmentEffectsManager : MonoBehaviour
         if (Loader.Instance.Network.IsMaster)
         {
             var masterManager = Loader.Instance.Network.Master;
-            if (State.Fog != Fog || State.Rain != Rain || State.Wet != Wet || State.Cloud != Cloud || State.TimeOfDay != CurrentTimeOfDay)
+            if (State.Fog != Fog || State.Rain != Rain || State.Wet != Wet || State.Cloud != Cloud ||
+                State.Damage != Damage || State.TimeOfDay != CurrentTimeOfDay)
             {
                 State.Fog = Fog;
                 State.Rain = Rain;
                 State.Wet = Wet;
                 State.Cloud = Cloud;
+                State.Damage = Damage;
                 State.TimeOfDay = CurrentTimeOfDay;
 
-                var stateData = masterManager.PacketsProcessor.Write(State);
-                var message = MessagesPool.Instance.GetMessage(stateData.Length);
+                var writer = new NetDataWriter();
+                masterManager.PacketsProcessor.Write(writer, State);
+                var message = MessagesPool.Instance.GetMessage(writer.Length);
                 message.AddressKey = masterManager.Key;
-                message.Content.PushBytes(stateData);
+                message.Content.PushBytes(writer.CopyData());
                 message.Type = DistributedMessageType.ReliableOrdered;
                 masterManager.BroadcastMessage(message);
             }
@@ -177,6 +181,12 @@ public class EnvironmentEffectsManager : MonoBehaviour
         Moon = Instantiate(MoonGO, new Vector3(0f, 50f, 0f), Quaternion.Euler(90f, 0f, 0f)).GetComponent<Light>();
         MoonHD = Moon.gameObject.GetComponent<HDAdditionalLightData>();
 
+        // AD Stack needs -90 degree map rotation so celestial bodies need rotated
+        var CelestialBodyHolder = new GameObject("CelestialBodyHolder");
+        CelestialBodyHolder.transform.SetPositionAndRotation(Vector3.zero, Quaternion.Euler(0f, -90f, 0f));
+        Sun.transform.SetParent(CelestialBodyHolder.transform);
+        Moon.transform.SetParent(CelestialBodyHolder.transform);
+
         Reset();
 
         PostPrecessingVolume = Instantiate(PostProcessingVolumePrefab);
@@ -186,12 +196,6 @@ public class EnvironmentEffectsManager : MonoBehaviour
         ActiveProfile.TryGet(out PBS);
 
         CloudRenderer = Instantiate(CloudPrefab, new Vector3(0f, 0f, 0f), Quaternion.identity).GetComponentInChildren<Renderer>();
-
-        // RainVolumes.AddRange(FindObjectsOfType<RainVolume>());
-        // foreach (var volume in RainVolumes)
-        // {
-        //     RainPfxs.Add(volume.Init(RainPfx, RandomGenerator.Next()));
-        // }
 
         VFXRain = Instantiate(VFXRainPrefab);
         var origin = MapOrigin.Find();
@@ -324,12 +328,12 @@ public class EnvironmentEffectsManager : MonoBehaviour
 
     private void UpdateSunPosition()
     {
-        Sun.transform.rotation = SunMoonPosition.GetSunPosition(JDay + CurrentTimeOfDay / 24f, GPSLocation.Longitude, GPSLocation.Latitude);
+        Sun.transform.localRotation = SunMoonPosition.GetSunPosition(JDay + CurrentTimeOfDay / 24f, GPSLocation.Longitude, GPSLocation.Latitude);
     }
 
     private void UpdateMoonPosition()
     {
-        Moon.transform.rotation = SunMoonPosition.GetMoonPosition(JDay + CurrentTimeOfDay / 24f, GPSLocation.Longitude, GPSLocation.Latitude);
+        Moon.transform.localRotation = SunMoonPosition.GetMoonPosition(JDay + CurrentTimeOfDay / 24f, GPSLocation.Longitude, GPSLocation.Latitude);
     }
 
     private void TimeOfDayCycle()
@@ -602,6 +606,7 @@ public class EnvironmentEffectsManager : MonoBehaviour
         State.Rain = Rain;
         State.Wet = Wet;
         State.Cloud = Cloud;
+        State.Damage = Damage;
         State.TimeOfDay = CurrentTimeOfDay;
     }
 }

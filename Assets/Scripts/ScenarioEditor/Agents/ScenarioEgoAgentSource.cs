@@ -38,12 +38,17 @@ namespace Simulator.ScenarioEditor.Agents
         /// </summary>
         private GameObject draggedInstance;
 
+        /// <summary>
+        /// Renderer prefab that will be instantiated if instance has no mesh renderers
+        /// </summary>
+        public GameObject defaultRendererPrefab;
+
         /// <inheritdoc/>
         public override string ElementTypeName => "EgoAgent";
 
         /// <inheritdoc/>
         public override string ParameterType => "vehicle";
-        
+
         /// <inheritdoc/>
         public override int AgentTypeId => 1;
 
@@ -80,26 +85,33 @@ namespace Simulator.ScenarioEditor.Agents
                         Name = sensorsConfiguration.Name
                     });
                 }
+
                 if (newVehicle.assetModel != null)
                     newVehicle.AcquirePrefab();
 
                 Variants.Add(newVehicle);
-                progress.Report((float)(i+1)/library.Length);
+                progress.Report((float) (i + 1) / library.Length);
             }
         }
 
         /// <inheritdoc/>
-        public override void Deinitialize()
-        {
-        }
+        public override void Deinitialize() { }
 
         /// <inheritdoc/>
         public override GameObject GetModelInstance(SourceVariant variant)
         {
-            var instance = base.GetModelInstance(variant);
-            var colliders = instance.GetComponentsInChildren<Collider>();
-            foreach (var collider in colliders) collider.isTrigger = true;
+            var instance = variant.Prefab != null
+                ? base.GetModelInstance(variant)
+                : ScenarioManager.Instance.prefabsPools.GetInstance(defaultRendererPrefab);
             
+            ((EgoAgentVariant) variant).AddRequiredComponents(instance, defaultRendererPrefab);
+            var colliders = instance.GetComponentsInChildren<Collider>();
+            foreach (var collider in colliders)
+                collider.isTrigger = true;
+
+            var agent = instance.GetComponent<IAgentController>();
+            agent?.DisableControl();
+
             //Destroy all the custom components from the ego vehicle
             var allComponents = instance.GetComponents<MonoBehaviour>();
             for (var i = 0; i < allComponents.Length; i++)
@@ -107,10 +119,6 @@ namespace Simulator.ScenarioEditor.Agents
                 var component = allComponents[i];
                 DestroyImmediate(component);
             }
-
-            var rigidbody = instance.GetComponent<Rigidbody>();
-            rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
-            rigidbody.isKinematic = true;
             return instance;
         }
 

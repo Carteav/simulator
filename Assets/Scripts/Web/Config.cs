@@ -4,6 +4,7 @@
  * This software contains code licensed as described in LICENSE.
  *
  */
+
 using Simulator.Bridge;
 using Simulator.Controllable;
 using Simulator.Sensors;
@@ -31,10 +32,9 @@ namespace Simulator.Web
         public static int ApiPort = 8181;
 
         public static string CloudUrl = "https://wise.svlsimulator.com";
+        public static string CloudProxy;
         public static string SessionGUID;
         public static string SimID;
-
-        public static bool AgreeToLicense = false;
 
         public static bool Headless = false;
 
@@ -61,14 +61,22 @@ namespace Simulator.Web
             public bool Enabled = true;
         }
         public static Dictionary<string, NPCAssetData> NPCVehicles = new Dictionary<string, NPCAssetData>();
-
+        public class PedAssetData
+        {
+            [NonSerialized]
+            public GameObject Prefab;
+            public string Name;
+            public string AssetGuid;
+            public bool Enabled = true;
+        }
+        public static Dictionary<string, PedAssetData> Pedestrians = new Dictionary<string, PedAssetData>();
         public static Dictionary<string, IntPtr> FMUs = new Dictionary<string, IntPtr>(); // managed by FMU.cs
 
         public static int DefaultPageSize = 100;
 
         public static FileStream LockFile;
 
-        public static bool SensorDebugModeEnabled = false;
+        public static bool DeveloperDebugModeEnabled = false;
 
         public static string SentryDSN = "";
 
@@ -158,7 +166,8 @@ namespace Simulator.Web
                     }
                     catch (Exception ex)
                     {
-                        Debug.LogWarning($"failed to load asset from {manifestFile.Path}: {ex.Message} STACK: {ex.StackTrace}");
+                        Debug.LogWarning($"failed to load asset from {manifestFile.Path}");
+                        Debug.LogException(ex);
                     }
                 }
             }
@@ -171,49 +180,8 @@ namespace Simulator.Web
             }
         }
 
-        private static void LoadBuiltinAssets()
+        private static void LoadBuiltinAssets() // TODO remove
         {
-            var npcSettings = NPCSettings.Load();
-            var prefabs = new[]
-            {
-                "Hatchback",
-                "Sedan",
-                "Jeep",
-                "SUV",
-                "BoxTruck",
-                "SchoolBus",
-            };
-
-            foreach (var entry in prefabs)
-            {
-                var go = npcSettings.NPCPrefabs.Find(x => x.name == entry) as GameObject;
-                if (go == null)
-                {
-                    // I was seeing this in editor a few times, where it was not able to find the builtin assets
-                    Debug.LogError($"Failed to load builtin {entry} "+(go==null?"null":go.ToString()));
-                    continue;
-                }
-                Map.NPCSizeType size = Map.NPCSizeType.MidSize;
-                var meta = go.GetComponent<NPCMetaData>();
-
-                if (meta != null)
-                {
-                    size = meta.SizeType;
-                }
-                else
-                {
-                    Debug.LogWarning($"NPC {entry} missing meta info, setting default size");
-                }
-
-                NPCVehicles.Add(entry, new NPCAssetData
-                {
-                    Prefab = go,
-                    NPCType = size,
-                    Name = entry,
-                    AssetGuid = $"builtin-{entry}",
-                });
-            }
-
             var behaviours = new []
             {
                 typeof(NPCLaneFollowBehaviour),
@@ -250,8 +218,8 @@ namespace Simulator.Web
             CheckDir(vfs.GetChild(BundleConfig.pluralOf(BundleConfig.BundleTypes.Bridge)), LoadBridgePlugin); // NOTE: bridges must be loaded before sensor plugins
             CheckDir(vfs.GetChild(BundleConfig.pluralOf(BundleConfig.BundleTypes.Sensor)), LoadSensorPlugin);
             CheckDir(vfs.GetChild(BundleConfig.pluralOf(BundleConfig.BundleTypes.NPC)), LoadNPCAsset);
-
-            Debug.Log($"Loaded {NPCBehaviours.Count} NPCs behaviours and {NPCVehicles.Count} NPC models in {sw.Elapsed}");
+            CheckDir(vfs.GetChild(BundleConfig.pluralOf(BundleConfig.BundleTypes.Pedestrian)), LoadPedestrianAsset);
+            Debug.Log($"Loaded NPCs behaviours: {NPCBehaviours.Count}  NPC models: {NPCVehicles.Count}  Pedestrians: {Pedestrians.Count} Controllables: {Controllables.Count} Bridges: {BridgePlugins.All.Count }in {sw.Elapsed}");
         }
 
         private static Assembly LoadAssembly(VfsEntry dir, string name)
@@ -322,7 +290,9 @@ namespace Simulator.Web
                         Debug.LogWarning("prefab is null for " + path);
                     }
                     SensorPrefabs.Add(prefab.GetComponent<SensorBase>());
-                    Sensors.Add(SensorTypes.GetConfig(prefab.GetComponent<SensorBase>()));
+                    var sensorConfig = SensorTypes.GetConfig(prefab.GetComponent<SensorBase>());
+                    sensorConfig.AssetGuid = manifest.assetGuid;
+                    Sensors.Add(sensorConfig);
                     if (!SensorTypeLookup.ContainsKey(manifest.assetGuid))
                     {
                         SensorTypeLookup.Add(manifest.assetGuid, prefab.GetComponent<SensorBase>());
@@ -352,7 +322,7 @@ namespace Simulator.Web
                 throw new Exception($"Manifest version mismatch, expected {BundleConfig.Versions[BundleConfig.BundleTypes.Sensor]}, got {manifest.assetFormat}");
             }
 
-            if (Sensors.FirstOrDefault(s => s.Guid == manifest.assetGuid) != null)
+            if (Sensors.FirstOrDefault(s => s.AssetGuid == manifest.assetGuid) != null)
             {
                 return;
             }
@@ -388,7 +358,7 @@ namespace Simulator.Web
 
             SensorBase pluginBase = pluginBundle.LoadAsset<GameObject>(pluginAssets[0]).GetComponent<SensorBase>();
             SensorConfig config = SensorTypes.GetConfig(pluginBase);
-            config.Guid = manifest.assetGuid;
+            config.AssetGuid = manifest.assetGuid;
             Sensors.Add(config);
             SensorPrefabs.Add(pluginBase);
             if (!SensorTypeLookup.ContainsKey(manifest.assetGuid))
@@ -397,7 +367,7 @@ namespace Simulator.Web
             }
         }
 
-        public static void LoadControllablePlugin(Manifest manifest, VfsEntry dir) 
+        public static void LoadControllablePlugin(Manifest manifest, VfsEntry dir)
         {
             if (manifest.assetFormat != BundleConfig.Versions[BundleConfig.BundleTypes.Controllable])
             {
@@ -410,7 +380,7 @@ namespace Simulator.Web
             var pluginStream = dir.Find($"{manifest.assetGuid}_controllable_main_{platform}").SeekableStream();
             AssetBundle pluginBundle = AssetBundle.LoadFromStream(pluginStream);
             var pluginAssets = pluginBundle.GetAllAssetNames();
-            
+
             var texDir = dir.Find($"{manifest.assetGuid}_controllable_textures");
             if (texDir != null)
             {
@@ -426,6 +396,29 @@ namespace Simulator.Web
             //Find a prefab with main asset name ignoring the characters case
             var mainPrefabName = pluginAssets.First(name => name.IndexOf(prefabName, StringComparison.InvariantCultureIgnoreCase) >= 0);
             var controllable = pluginBundle.LoadAsset<GameObject>(mainPrefabName).GetComponent<IControllable>();
+
+#if UNITY_EDITOR
+            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true)
+            {
+                if (File.Exists(Path.Combine(BundleConfig.ExternalBase, "Controllables", manifest.assetName, $"{manifest.assetName}.prefab")))
+                {
+                    var prefab = (GameObject)AssetDatabase.LoadAssetAtPath(Path.Combine(BundleConfig.ExternalBase, "Controllables", manifest.assetName, $"{manifest.assetName}.prefab"), typeof(GameObject));
+                    Controllables.Add(manifest.assetName, prefab.GetComponent<IControllable>());
+
+                    var debugAssets = new List<GameObject>();
+                    foreach (var pluginAsset in pluginAssets)
+                    {
+                        if (pluginAsset == mainPrefabName)
+                            continue;
+                        debugAssets.Add(pluginBundle.LoadAsset<GameObject>(pluginAsset));
+                    }
+                    ControllableAssets.Add(controllable, debugAssets);
+
+                    return;
+                }
+            }
+#endif
+
             Controllables.Add(manifest.assetName, controllable);
             var additionalAssets = new List<GameObject>();
             foreach (var pluginAsset in pluginAssets)
@@ -474,9 +467,50 @@ namespace Simulator.Web
 
             string platform = SystemInfo.operatingSystemFamily == OperatingSystemFamily.Windows ? "windows" : "linux";
             var pluginEntry = dir.Find($"{manifest.assetGuid}_npc_main_{platform}");
+
+#if UNITY_EDITOR
+            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true)
+            {
+                foreach (var NPCDir in Directory.EnumerateDirectories(Path.Combine(BundleConfig.ExternalBase, BundleConfig.pluralOf(BundleConfig.BundleTypes.NPC))))
+                {
+                    var assembly = Assembly.Load("Simulator.NPCs");
+                    if (File.Exists(Path.Combine(NPCDir, manifest.assetName, $"{manifest.assetName}.prefab")))
+                    {
+                        var prefab = (GameObject)AssetDatabase.LoadAssetAtPath(Path.Combine(NPCDir, manifest.assetName, $"{manifest.assetName}.prefab"), typeof(GameObject));
+
+                        Map.NPCSizeType size = Map.NPCSizeType.MidSize;
+                        var meta = prefab.GetComponent<NPCMetaData>();
+
+                        if (meta != null)
+                        {
+                            size = meta.SizeType;
+                        }
+                        else
+                        {
+                            Debug.LogWarning($"NPC {manifest.assetName} missing meta info, setting default type");
+                        }
+
+                        NPCVehicles.Add(manifest.assetName, new NPCAssetData()
+                        {
+                            Prefab = prefab,
+                            Name = manifest.assetName,
+                            AssetGuid = manifest.assetGuid,
+                            NPCType = size,
+                        });
+
+                        if (textureBundle && !AssetBundle.GetAllLoadedAssetBundles().Contains(textureBundle))
+                        {
+                            textureBundle.LoadAllAssets();
+                        }
+
+                        return;
+                    }
+                }
+            }
+#endif
+
             if (pluginEntry != null)
             {
-
                 AssetBundle pluginBundle = AssetBundle.LoadFromStream(pluginEntry.SeekableStream());
                 var pluginAssets = pluginBundle.GetAllAssetNames();
                 var prefabName = $"{manifest.assetName}.prefab";
@@ -516,6 +550,79 @@ namespace Simulator.Web
             }
         }
 
+        private static void LoadPedestrianAsset(Manifest manifest, VfsEntry dir)
+        {
+            if (manifest.assetFormat != BundleConfig.Versions[BundleConfig.BundleTypes.Pedestrian])
+            {
+                throw new Exception($"manifest version mismatch, expected {BundleConfig.Versions[BundleConfig.BundleTypes.Pedestrian]}, got {manifest.assetFormat}");
+            }
+
+            var texEntry = dir.Find($"{manifest.assetGuid}_pedestrian_textures");
+            AssetBundle textureBundle = null;
+            if (texEntry != null)
+            {
+                var texStream = VirtualFileSystem.VirtualFileSystem.EnsureSeekable(texEntry.SeekableStream(), (int)texEntry.Size);
+                textureBundle = AssetBundle.LoadFromStream(texStream, 0, 1 << 20);
+            }
+
+            string platform = SystemInfo.operatingSystemFamily == OperatingSystemFamily.Windows ? "windows" : "linux";
+            var pluginEntry = dir.Find($"{manifest.assetGuid}_pedestrian_main_{platform}");
+
+#if UNITY_EDITOR
+            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true)
+            {
+                var assembly = Assembly.Load("Simulator.Pedestrians");
+                foreach (var PedDir in Directory.EnumerateDirectories(Path.Combine(BundleConfig.ExternalBase, BundleConfig.pluralOf(BundleConfig.BundleTypes.Pedestrian))))
+                {
+                    if (File.Exists(Path.Combine(PedDir, manifest.assetName, $"{manifest.assetName}.prefab")))
+                    {
+                        var prefab = (GameObject)AssetDatabase.LoadAssetAtPath(Path.Combine(PedDir, manifest.assetName, $"{manifest.assetName}.prefab"), typeof(GameObject));
+
+                        Pedestrians.Add(manifest.assetName, new PedAssetData()
+                        {
+                            Prefab = prefab,
+                            Name = manifest.assetName,
+                            AssetGuid = manifest.assetGuid,
+                        });
+
+                        if (textureBundle && !AssetBundle.GetAllLoadedAssetBundles().Contains(textureBundle))
+                        {
+                            textureBundle.LoadAllAssets();
+                        }
+
+                        return;
+                    }
+                }
+            }
+#endif
+
+            if (pluginEntry != null)
+            {
+                AssetBundle pluginBundle = AssetBundle.LoadFromStream(pluginEntry.SeekableStream());
+                var pluginAssets = pluginBundle.GetAllAssetNames();
+                var prefabName = $"{manifest.assetName}.prefab";
+                var mainPrefabName = pluginAssets.First(name => name.IndexOf(prefabName, StringComparison.InvariantCultureIgnoreCase) >= 0);
+                GameObject prefab = pluginBundle.LoadAsset<GameObject>(mainPrefabName);
+
+                Pedestrians.Add(manifest.assetName, new PedAssetData()
+                {
+                    Prefab = prefab,
+                    Name = manifest.assetName,
+                    AssetGuid = manifest.assetGuid,
+                });
+            }
+
+            if (pluginEntry == null)
+            {
+                Debug.LogWarning("No prefab found in " + manifest.assetName);
+            }
+
+            if (textureBundle && !AssetBundle.GetAllLoadedAssetBundles().Contains(textureBundle))
+            {
+                textureBundle.LoadAllAssets();
+            }
+        }
+
         private class YamlConfig
         {
             public bool headless { get; set; } = Config.Headless;
@@ -523,6 +630,7 @@ namespace Simulator.Web
             public string api_hostname { get; set; } = Config.ApiHost;
             public int api_port { get; set; } = Config.ApiPort;
             public string cloud_url { get; set; } = Config.CloudUrl;
+            public string cloud_proxy { get; set; } = Config.CloudProxy;
             public string data_path { get; set; } = Config.PersistentDataPath;
         }
 
@@ -551,6 +659,7 @@ namespace Simulator.Web
                 api_port = ApiPort,
                 data_path = PersistentDataPath,
                 cloud_url = CloudUrl,
+                cloud_proxy = CloudProxy,
                 headless = Headless
             };
         }
@@ -579,6 +688,14 @@ namespace Simulator.Web
             if (!string.IsNullOrEmpty(cloudUrl))
             {
                 CloudUrl = cloudUrl;
+            }
+
+            CloudProxy = config.cloud_proxy;
+            string cloudProxy = Environment.GetEnvironmentVariable("http_proxy") ??
+                                Environment.GetEnvironmentVariable("HTTP_PROXY");
+            if (!string.IsNullOrEmpty(cloudProxy))
+            {
+                CloudProxy = cloudProxy;
             }
 
             Headless = config.headless;
@@ -636,7 +753,7 @@ namespace Simulator.Web
                             Application.Quit(1);
                         }
 
-                        PersistentDataPath = args[++i];
+                        PersistentDataPath = Path.GetFullPath(args[++i]);
                         break;
                     case "--retryForever":
                         RetryForever = true;

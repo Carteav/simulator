@@ -6,8 +6,7 @@ using Carteav.Messages;
 using OsmSharp.API;
 using Simulator.Bridge;
 using Simulator.Bridge.Data;
-using Simulator.Bridge.Ros2;
-using Simulator.Bridge.Ros2.Lgsvl;
+
 using Simulator.Sensors;
 using Simulator.Sensors.UI;
 using UnityEngine;
@@ -85,6 +84,16 @@ namespace Carteav
             return true;
         }
 
+        protected override void Initialize()
+        {
+            //throw new NotImplementedException();
+        }
+
+        protected override void Deinitialize()
+        {
+            //throw new NotImplementedException();
+        }
+
         public override void OnBridgeSetup(BridgeInstance bridge)
         {
             Bridge = bridge;
@@ -98,7 +107,7 @@ namespace Carteav
 
             var plugin = bridge.Plugin;
 
-            Ros2BridgeFactory ros2Factory = new Ros2BridgeFactory();
+            var ros2Factory = bridge.Plugin.Factory;
             ros2Factory.RegSubscriber<CartPath, Carteav.Messages.CartPath>(plugin,
                 (path) => new CartPath(path));
             ros2Factory.RegSubscriber<SiteBoundaries, Carteav.Messages.SiteBoundries>(plugin,

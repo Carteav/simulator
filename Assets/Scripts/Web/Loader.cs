@@ -30,6 +30,9 @@ using VirtualFileSystem;
 
 namespace Simulator
 {
+    using System.Reflection;
+    using UnityEditor;
+
     public class AgentConfig
     {
         public string Name;
@@ -141,7 +144,7 @@ namespace Simulator
     public class Loader : MonoBehaviour
     {
         private static string ScenarioEditorSceneName = "ScenarioEditor";
-        private static bool IsInScenarioEditor;
+        public static bool IsInScenarioEditor { get; private set; }
 
         public SimulationNetwork Network { get; } = new SimulationNetwork();
         public SimulatorManager SimulatorManagerPrefab;
@@ -154,7 +157,8 @@ namespace Simulator
 
         // NOTE: When simulation is not running this reference will be null.
         private SimulationData currentSimulation;
-        public SimulationData CurrentSimulation {
+        public SimulationData CurrentSimulation
+        {
             get { return currentSimulation; }
         }
 
@@ -177,7 +181,7 @@ namespace Simulator
 
         string reportedStatus(SimulatorStatus status)
         {
-            switch(status)
+            switch (status)
             {
                 case SimulatorStatus.Idle: return "Idle";
                 // WISE does not care about Loading, just Starting
@@ -297,7 +301,7 @@ namespace Simulator
 
         public async void StartSimulation(SimulationData simData)
         {
-            CloudAPI api = null;
+            CloudAPI API = null;
             if (Instance.Status != SimulatorStatus.Idle)
             {
                 Debug.LogWarning($"Received start simulation command while Simulator is not idle. (status: {Instance.Status})");
@@ -319,8 +323,8 @@ namespace Simulator
                     }
 
                     var simInfo = CloudAPI.GetInfo();
-                    var reader = await api.Connect(simInfo);
-                    await api.EnsureConnectSuccess();
+                    var reader = await API.Connect(simInfo);
+                    await API.EnsureConnectSuccess();
                 }
 #endif
                 currentSimulation = simData;
@@ -357,18 +361,28 @@ namespace Simulator
                     }
 
                     List<SensorData> sensorsToDownload = new List<SensorData>();
-                    foreach(var data in simData.Vehicles)
+                    foreach (var data in simData.Vehicles)
                     {
                         foreach (var plugin in data.Sensors)
                         {
-                            if (plugin.Plugin.AssetGuid != null && sensorsToDownload.FirstOrDefault(s => s.Plugin.AssetGuid == plugin.Plugin.AssetGuid) == null)
+#if UNITY_EDITOR
+                            if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true && Config.Sensors.FirstOrDefault(s => s.Name == plugin.Name) != null)
+                            {
+                                Debug.Log($"Sensor {plugin.Name} is not being downloaded, but used from cache or local sources. (Developer Debug Mode)");
+                                continue;
+                            }
+#endif
+
+                            if (plugin.Plugin.AssetGuid != null
+                                && sensorsToDownload.FirstOrDefault(s => s.Plugin.AssetGuid == plugin.Plugin.AssetGuid) == null
+                            )
                             {
                                 sensorsToDownload.Add(plugin);
                             }
                         }
                     }
 
-                    foreach(var sensor in sensorsToDownload)
+                    foreach (var sensor in sensorsToDownload)
                     {
                         var pluginTask = DownloadManager.GetAsset(BundleConfig.BundleTypes.Sensor, sensor.Plugin.AssetGuid, sensor.Name);
                         downloads.Add(pluginTask);
@@ -447,9 +461,9 @@ namespace Simulator
 #if UNITY_EDITOR
             finally
             {
-                if (api != null)
+                if (API != null)
                 {
-                    api.Disconnect();
+                    API.Disconnect();
                 }
             }
 #endif
@@ -500,7 +514,7 @@ namespace Simulator
                                 l.UpdateData(mapBundlePath, Utility.StringToGUID(l.GetDataPath()).ToString());
 
                             SetupScene(simulation);
-                        }); 
+                        });
                         LoadMap(simulation.Map.AssetGuid, simulation.Map.Name, LoadSceneMode.Single, callback);
                     }
                     else
@@ -565,7 +579,7 @@ namespace Simulator
                 {
                     foreach (var download in assetDownloads)
                     {
-                        if (!download.Key.IsCompleted)
+                        if (!download.Key.IsCompleted && !download.Key.IsCanceled)
                         {
                             DownloadManager.StopAssetDownload(download.Value);
                         }
@@ -656,7 +670,7 @@ namespace Simulator
                 ZipEntry entry = zip.GetEntry("manifest.json");
                 using (var ms = zip.GetInputStream(entry))
                 {
-                    int streamSize = (int) entry.Size;
+                    int streamSize = (int)entry.Size;
                     byte[] buffer = new byte[streamSize];
                     streamSize = ms.Read(buffer, 0, streamSize);
                     manfile = Encoding.UTF8.GetString(buffer);
@@ -747,15 +761,48 @@ namespace Simulator
                 foreach (var agentConfig in SimConfig.Agents)
                 {
                     var bundlePath = agentConfig.AssetBundle;
+
                     if (cachedVehicles.ContainsKey(agentConfig.AssetGuid))
                     {
                         agentConfig.Prefab = cachedVehicles[agentConfig.AssetGuid];
                         continue;
                     }
 #if UNITY_EDITOR
-                    if(bundlePath.EndsWith(".prefab"))
+                    if (EditorPrefs.GetBool("Simulator/Developer Debug Mode", false) == true && !bundlePath.EndsWith(".prefab"))
                     {
-                        agentConfig.Prefab = (GameObject) UnityEditor.AssetDatabase.LoadAssetAtPath(bundlePath, typeof(GameObject));
+                        string assetName = "";
+                        using (ZipFile zip = new ZipFile(bundlePath))
+                        {
+                            Manifest manifest;
+                            ZipEntry entry = zip.GetEntry("manifest.json");
+                            using (var ms = zip.GetInputStream(entry))
+                            {
+                                int streamSize = (int)entry.Size;
+                                byte[] buffer = new byte[streamSize];
+                                streamSize = ms.Read(buffer, 0, streamSize);
+
+                                try
+                                {
+                                    manifest = Newtonsoft.Json.JsonConvert.DeserializeObject<Manifest>(Encoding.UTF8.GetString(buffer, 0, streamSize));
+                                    assetName = manifest.assetName;
+                                }
+                                catch
+                                {
+                                    throw new Exception("Out of date AssetBundle, rebuild or download latest AssetBundle.");
+                                }
+                            }
+                        }
+
+                        string filePath = Path.Combine(BundleConfig.ExternalBase, "Vehicles", assetName, $"{assetName}.prefab");
+                        if (File.Exists(filePath))
+                        {
+                            bundlePath = filePath;
+                        }
+                    }
+
+                    if (bundlePath.EndsWith(".prefab"))
+                    {
+                        agentConfig.Prefab = (GameObject)UnityEditor.AssetDatabase.LoadAssetAtPath(bundlePath, typeof(GameObject));
                     }
                     else
 #endif
@@ -848,6 +895,18 @@ namespace Simulator
                     if (vehicleAssets.Length != 1)
                     {
                         throw new Exception($"Unsupported '{manifest.assetName}' vehicle asset bundle, only 1 asset expected");
+                    }
+
+                    //Import main assembly
+                    var assembly = zip.GetEntry($"{manifest.assetName}.dll");
+                    if (assembly != null)
+                    {
+                        using (var s = zip.GetInputStream(assembly))
+                        {
+                            byte[] buffer = new byte[s.Length];
+                            s.Read(buffer, 0, (int)s.Length);
+                            Assembly.Load(buffer);
+                        }
                     }
 
                     if (manifest.fmuName != "")

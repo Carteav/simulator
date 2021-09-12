@@ -28,6 +28,7 @@ Shader "Simulator/PointCloud/HDRP/Compose"
         #define LIGHTLOOP_DISABLE_TILE_AND_CLUSTER
         #define HAS_LIGHTLOOP 
         #define SHADOW_OPTIMIZE_REGISTER_USAGE 1
+        #define SHADOW_LOW
 
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonLighting.hlsl"
         #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Lighting/Shadow/HDShadowContext.hlsl"

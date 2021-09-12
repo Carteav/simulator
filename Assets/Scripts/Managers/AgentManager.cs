@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019-2020 LG Electronics, Inc.
+ * Copyright (c) 2019-2021 LG Electronics, Inc.
  *
  * This software contains code licensed as described in LICENSE.
  *
@@ -25,7 +25,7 @@ public class AgentManager : MonoBehaviour
     public string Key { get; } = "AgentManager";
     
     public GameObject CurrentActiveAgent { get; private set; } = null;
-    public AgentController CurrentActiveAgentController { get; private set; } = null;
+    public IAgentController CurrentActiveAgentController { get; private set; } = null;
     public List<AgentConfig> ActiveAgents { get; private set; } = new List<AgentConfig>();
 
     public MessagesManager NetworkMessagesManager
@@ -46,9 +46,19 @@ public class AgentManager : MonoBehaviour
         go.name = config.Name;
         // set it inactive until we can be sure setting up sensors etc worked without exceptions and it AgentController was initialized
         go.SetActive(false);
-        var agentController = go.GetComponent<AgentController>();
-        agentController.Config = config;
-        agentController.Config.AgentGO = go;
+        var controller = go.GetComponent<IAgentController>();
+        if (controller == null)
+        {
+            Debug.LogWarning($"{nameof(IAgentController)} implementation not found on the {config.Name} vehicle. This vehicle can't be used as an ego vehicle.");
+        }
+        else
+        {
+            controller.Config = config;
+            controller.Config.AgentGO = go;
+            ActiveAgents.Add(controller.Config);
+            controller.GTID = ++SimulatorManager.Instance.GTIDs;
+            controller.Config.GTID = controller.GTID;
+        }
 
         var lane = go.AddComponent<VehicleLane>();
 
@@ -70,25 +80,13 @@ public class AgentManager : MonoBehaviour
         if (network.IsClusterSimulation)
         {
             HierarchyUtilities.ChangeToUniqueName(go);
-            if (network.IsClient)
-            {
-                //Disable controller and dynamics on clients so it will not interfere mocked components
-                agentController.enabled = false;
-                var vehicleDynamics = agentController.GetComponent<IVehicleDynamics>() as MonoBehaviour;
-                if (vehicleDynamics != null)
-                    vehicleDynamics.enabled = false;
-            }
-            
-            //Change the simulation type only if it's not set in the prefab
-            var distributedRigidbody = go.GetComponent<DistributedRigidbody>();
-            if (distributedRigidbody == null)
-            {
-                distributedRigidbody = go.AddComponent<DistributedRigidbody>();
-                distributedRigidbody.SimulationType = DistributedRigidbody.MockingSimulationType.ExtrapolateVelocities;
-            }
 
             //Add the rest required components for cluster simulation
             ClusterSimulationUtilities.AddDistributedComponents(go);
+            if (network.IsClient)
+            {
+                controller?.DisableControl();
+            }
         }
 
         BridgeClient bridgeClient = null;
@@ -147,16 +145,21 @@ public class AgentManager : MonoBehaviour
 
     public void SetCurrentActiveAgent(int index)
     {
-        if (ActiveAgents.Count == 0) return;
-        if (index < 0 || index > ActiveAgents.Count - 1) return;
-        if (ActiveAgents[index] == null) return;
+        if (ActiveAgents.Count == 0)
+            return;
+
+        if (index < 0 || index > ActiveAgents.Count - 1)
+            return;
+
+        if (ActiveAgents[index] == null)
+            return;
 
         CurrentActiveAgent = ActiveAgents[index].AgentGO;
-        CurrentActiveAgentController = CurrentActiveAgent.GetComponent<AgentController>();
+        CurrentActiveAgentController = CurrentActiveAgent.GetComponent<IAgentController>();
 
         foreach (var config in ActiveAgents)
         {
-            config.AgentGO.GetComponent<AgentController>().Active = (config.AgentGO == CurrentActiveAgent);
+            config.AgentGO.GetComponent<IAgentController>().Active = (config.AgentGO == CurrentActiveAgent);
         }
         ActiveAgentChanged(CurrentActiveAgent);
     }
@@ -179,8 +182,11 @@ public class AgentManager : MonoBehaviour
         for (int i = 0; i < ActiveAgents.Count; i++)
         {
             if (ActiveAgents[i].AgentGO == CurrentActiveAgent)
+            {
                 index = i;
+            }
         }
+
         return index;
     }
 
@@ -196,7 +202,7 @@ public class AgentManager : MonoBehaviour
 
     public void ResetAgent()
     {
-        CurrentActiveAgent?.GetComponent<AgentController>()?.ResetPosition();
+        CurrentActiveAgent?.GetComponent<IAgentController>()?.ResetPosition();
     }
 
     public void DestroyAgent(GameObject go)

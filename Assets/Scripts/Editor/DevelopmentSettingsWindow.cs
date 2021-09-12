@@ -425,7 +425,7 @@ namespace Simulator.Editor
 
             if (EditorGUI.EndChangeCheck())
             {
-                SaveAssetTime = Time.realtimeSinceStartup + .25f;
+                SaveAssetTime = Time.realtimeSinceStartup + 3.0f;
             }
         }
 

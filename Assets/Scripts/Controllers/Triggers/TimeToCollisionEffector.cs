@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2020 LG Electronics, Inc.
+ * Copyright (c) 2020-2021 LG Electronics, Inc.
  *
  * This software contains code licensed as described in LICENSE.
  *
@@ -27,15 +27,15 @@ public class TimeToCollisionEffector : TriggerEffector
     {
         var lowestTTC = TimeToCollisionLimit;
         var egos = SimulatorManager.Instance.AgentManager.ActiveAgents;
-        AgentController collisionEgo = null;
+        IAgentController collisionEgo = null;
         foreach (var ego in egos)
         {
-            var agentController = ego.AgentGO.GetComponentInChildren<AgentController>();
-            var ttc = CalculateTTC(agentController, agent);
+            var controller = ego.AgentGO.GetComponentInChildren<IAgentController>();
+            var ttc = CalculateTTC(controller, agent);
             if (ttc >= lowestTTC || ttc < 0.0f) continue;
             
             lowestTTC = ttc;
-            collisionEgo = agentController;
+            collisionEgo = controller;
         }
 
         //If there is no collision detected don't wait
@@ -63,14 +63,15 @@ public class TimeToCollisionEffector : TriggerEffector
         
     }
 
-    private float CalculateTTC(AgentController ego, ITriggerAgent agent)
+    private float CalculateTTC(IAgentController ego, ITriggerAgent agent)
     {
         //Calculate intersection point, return infinity if vehicles won't intersect
-        if (!GetLineIntersection(ego.transform.position, ego.transform.forward, agent.AgentTransform.position, agent.AgentTransform.forward,
+        var egoTransform = ego.AgentGameObject.transform;
+        if (!GetLineIntersection(egoTransform.position, egoTransform.forward, agent.AgentTransform.position, agent.AgentTransform.forward,
             out var intersection))
             return float.PositiveInfinity;
 
-        var egoDistance = Distance2D(ego.transform.position, intersection);
+        var egoDistance = Distance2D(egoTransform.position, intersection);
         var npcDistance = Distance2D(agent.AgentTransform.position, intersection);
         var egoTimeToIntersection = CalculateTimeForAccelerated(ego.Velocity.magnitude, ego.Acceleration.magnitude, egoDistance);
         var npcTimeToIntersection = CalculateTimeForAccelerated(agent.MovementSpeed, agent.Acceleration.magnitude, npcDistance);

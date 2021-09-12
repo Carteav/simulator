@@ -14,10 +14,8 @@ using System.Text.RegularExpressions;
 using System.Reflection;
 using UnityEditor;
 using UnityEditor.Compilation;
-using UnityEditor.Formats.Fbx.Exporter;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
 using ICSharpCode.SharpZipLib.Zip;
 using Newtonsoft.Json;
@@ -95,8 +93,8 @@ namespace Simulator.Editor
                     EditorGUILayout.HelpBox($"Following {bundlePath} were automatically detected:", UnityEditor.MessageType.None);
                 }
 
-                #region unity 2019.4.18f1 fix
-                // TODO fix for issues with unity 2019.4.18f1 multiple bundles
+                #region unity 2020.3.3f1 fix
+                // TODO fix for issues with unity 2020.3.3f1 multiple bundles
 
                 //if (entries.Count != 0)
                 //{
@@ -186,14 +184,20 @@ namespace Simulator.Editor
                 entries = entries.Where(entry => updated.Contains(entry.Key)).ToDictionary(p => p.Key, p => p.Value);
             }
 
-            public void EnableByName(string name)
+            public bool EnableByName(string name)
             {
                 if (!entries.ContainsKey(name))
                 {
                     var knownKeys = string.Join(",", entries.Keys);
-                    throw new Exception($"could not enable entry {name} as it was not found. Known entirs of {bundlePath} are {knownKeys}");
+                    Debug.LogWarning($"[BUILD] could not enable entry {name} as it was not found. Known entries of {bundlePath} are {knownKeys}");
+
+                    return false;
                 }
+
+                Debug.Log($"[BUILD] Enable entry '{name}' of {bundlePath}");
+
                 entries[name].selected = true;
+                return true;
             }
 
             private void PreparePrefabManifest(Entry prefabEntry, string outputFolder, List<(string, string)> buildArtifacts, Manifest manifest)
@@ -215,9 +219,13 @@ namespace Simulator.Editor
                 {
                     if (bundleType == BundleConfig.BundleTypes.Vehicle)
                     {
-                        var info = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile).GetComponent<VehicleInfo>();
-                        var fmu = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile).GetComponent<VehicleFMU>();
-                        var baseLink = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile).GetComponent<BaseLink>();
+                        var vehiclePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabEntry.mainAssetFile);
+                        var rigidbody = vehiclePrefab.GetComponent<Rigidbody>();
+                        var articulationBody = vehiclePrefab.GetComponent<ArticulationBody>();
+                        if (rigidbody == null && articulationBody == null)
+                        {
+                            throw new Exception($"Build failed: Rigidbody or ArticulationBody on {prefabEntry.mainAssetFile} not found. Please add a Rigidbody component and rebuild.");
+                        }
 
                         var controller = vehiclePrefab.GetComponent<IAgentController>();
                         if (controller == null)
@@ -231,10 +239,10 @@ namespace Simulator.Editor
 
                         if (info == null)
                         {
-                            throw new Exception($"Build failed: Vehicle info on {prefabEntry.mainAssetFile} not found. Please add a VehicleInfo component and rebuild.");
+                            Debug.LogWarning($"Build warning: Vehicle info on {prefabEntry.mainAssetFile} not found. Please add a VehicleInfo component to include meta data in the manifest.");
                         }
 
-                        manifest.description = info.Description;
+                        manifest.description = info != null ? info.Description : "";
                         manifest.assetType = "vehicle";
                         manifest.fmuName = fmu == null ? "" : fmu.FMUData.Name;
 
@@ -246,32 +254,13 @@ namespace Simulator.Editor
                         Dictionary<string, object> files = new Dictionary<string, object>();
                         manifest.attachments = files;
 
-                        var prefab = AssetDatabase.LoadAssetAtPath(prefabEntry.mainAssetFile, typeof(GameObject));
-                        var tempObj = Instantiate(prefab) as GameObject;
-
-                        FbxExportHelper.PrepareObject(tempObj);
-
-                        string glbFilename = $"{manifest.assetGuid}_vehicle_{manifest.assetName}.glb";
-                        string export = ModelExporter.ExportObject(Path.Combine("Assets", "External", "Vehicles", manifest.assetName, $"{manifest.assetName}.fbx"), tempObj);
-                        var glbOut = Path.Combine(outputFolder, glbFilename);
-                        System.Diagnostics.Process p = new System.Diagnostics.Process();
-                        p.EnableRaisingEvents = true;
-                        p.StartInfo.FileName = Path.Combine(Application.dataPath, "Plugins", "FBX2glTF",
-                            SystemInfo.operatingSystemFamily == OperatingSystemFamily.Windows ? "FBX2glTF-windows-x64.exe" : "FBX2glTF-linux-x64");
-                        p.StartInfo.Arguments = $"--binary --input {export} --output {glbOut}";
-                        p.OutputDataReceived += new System.Diagnostics.DataReceivedEventHandler((o, e) => Debug.Log(e.Data));
-                        p.ErrorDataReceived += new System.Diagnostics.DataReceivedEventHandler((o, e) => Debug.Log(e.Data));
-                        p.Exited += new EventHandler((o, e) =>
+                        using (var exporter = new GltfExporter(prefabEntry.mainAssetFile, manifest.assetGuid, manifest.assetName))
                         {
-                            Debug.Log("Successfully Exited");
-                            buildArtifacts.Add((glbOut, Path.Combine("gltf", glbFilename)));
-                            File.Delete(export);
-                            File.Delete($"{export}.meta");
-                            files.Add("gltf", ZipPath("gltf", glbFilename));
-                        });
-
-                        p.Start();
-                        CoreUtils.Destroy(tempObj);
+                            var fileName = exporter.Export(outputFolder);
+                            var glbOut = Path.Combine(outputFolder, fileName);
+                            buildArtifacts.Add((glbOut, Path.Combine("gltf", fileName)));
+                            files.Add("gltf", ZipPath("gltf", fileName));
+                        }
 
                         var textures = new BundlePreviewRenderer.PreviewTextures();
                         BundlePreviewRenderer.RenderVehiclePreview(prefabEntry.mainAssetFile, textures);
@@ -554,6 +543,7 @@ namespace Simulator.Editor
                                     case BundleConfig.BundleTypes.Sensor:
                                     case BundleConfig.BundleTypes.NPC:
                                     case BundleConfig.BundleTypes.Bridge:
+                                    case BundleConfig.BundleTypes.Pedestrian:
                                         //Include the main asset only
                                         texturesNames.AddRange(AssetDatabase.GetDependencies(entry.mainAssetFile).Where(a => a.EndsWith(".png") || a.EndsWith(".jpg") || a.EndsWith(".tga")).ToArray());
                                         assetsNames.Add(entry.mainAssetFile);
@@ -682,7 +672,6 @@ namespace Simulator.Editor
 
                             if (manifest.fmuName != "")
                             {
-
                                 var fmuPathWindows = Path.Combine(sourcePath, manifest.assetName, manifest.fmuName, "binaries", "win64", $"{manifest.fmuName}.dll");
                                 var fmuPathLinux = Path.Combine(sourcePath, manifest.assetName, manifest.fmuName, "binaries", "linux64", $"{manifest.fmuName}.so");
                                 if (File.Exists(fmuPathWindows))
@@ -898,8 +887,8 @@ namespace Simulator.Editor
             EditorGUILayout.BeginHorizontal(GUILayout.ExpandHeight(false));
             BuildPlayer = GUILayout.Toggle(BuildPlayer, "Build Simulator:", GUILayout.ExpandWidth(false));
 
-            #region unity 2019.4.18f1 fix
-            // TODO fix for issues with unity 2019.4.18f1 multiple bundles
+            #region unity 2020.3.3f1 fix
+            // TODO fix for issues with unity 2020.3.3f1 multiple bundles
             if (BuildPlayer)
             {
                 foreach (var group in BuildGroups.Values)
@@ -1000,6 +989,23 @@ namespace Simulator.Editor
                 if (!BuildGroups.ContainsKey(bundlePath))
                 {
                     var data = new BundleData(BundleConfig.BundleTypes.NPC, bundlePath);
+                    BuildGroups.Add(data.bundlePath, data);
+                }
+            }
+
+            foreach (var PedDir in Directory.EnumerateDirectories(Path.Combine(BundleConfig.ExternalBase, BundleConfig.pluralOf(BundleConfig.BundleTypes.Pedestrian))))
+            {
+                var bundlePath = PedDir.Substring(BundleConfig.ExternalBase.Length + 1);
+
+                // Ignore temp folders created by Jenkins
+                if (bundlePath.EndsWith("@tmp"))
+                {
+                    continue;
+                }
+
+                if (!BuildGroups.ContainsKey(bundlePath))
+                {
+                    var data = new BundleData(BundleConfig.BundleTypes.Pedestrian, bundlePath);
                     BuildGroups.Add(data.bundlePath, data);
                 }
             }
@@ -1123,7 +1129,9 @@ namespace Simulator.Editor
             try
             {
                 foreach (var group in BuildGroups.Values)
+                {
                     group.RunBuild(outputFolder);
+                }
             }
             finally
             {
@@ -1163,7 +1171,7 @@ namespace Simulator.Editor
             Build build = new Build();
             build.Refresh();
 
-            var buildBundleParam = new Regex("^-build(Environment|Vehicle|Sensor|Controllable|NPC|Bridge)s$");
+            var buildBundleParam = new Regex("^-build(Environment|Vehicle|Sensor|Controllable|NPC|Bridge|Pedestrian)s$");
             int bundleSum = 0;
 
             var args = Environment.GetCommandLineArgs();
@@ -1232,21 +1240,32 @@ namespace Simulator.Editor
                         i++;
                         foreach (var name in args[i].Split(','))
                         {
+                            bool isAssetEnabled = false;
+
                             foreach (var buildGroup in bundleGroups)
                             {
                                 if (name == "all")
                                 {
                                     foreach (var entry in buildGroup.entries.Values)
                                     {
+                                        isAssetEnabled = true;
                                         entry.selected = true;
                                         bundleSum++;
+
+                                        Debug.Log($"[BUILD] Enable {bundleType} entry '{entry.name}'");
                                     }
                                 }
                                 else
                                 {
-                                    buildGroup.EnableByName(name);
-                                    bundleSum++;
+                                    if (buildGroup.EnableByName(name) == true) {
+                                        bundleSum++;
+                                        isAssetEnabled = true;
+                                    }
                                 }
+                            }
+
+                            if (!isAssetEnabled) {
+                                throw new Exception($"could not enable entry {name} of {bundleType}");
                             }
                         }
                     }

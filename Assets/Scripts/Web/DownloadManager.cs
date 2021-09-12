@@ -61,7 +61,6 @@ namespace Simulator.Web
                 {
                     OnCompleted(this, args.Error == null && !args.Cancelled, args.Error);
                 }
-                
 
                 client.DownloadProgressChanged -= Update;
                 client.DownloadFileCompleted -= Completed;
@@ -89,6 +88,7 @@ namespace Simulator.Web
 
         static ConcurrentQueue<Download> downloads = new ConcurrentQueue<Download>();
         static WebClient client;
+        static WebProxy proxy;
         static string currentUrl;
         static int currentProgress;
         static long nextUpdate;
@@ -104,6 +104,13 @@ namespace Simulator.Web
 
             client = new WebClient();
             client.Headers.Add("SimId", Config.SimID);
+            // Initialize proxy here
+            if (!string.IsNullOrEmpty(Config.CloudProxy))
+            {
+                proxy = new WebProxy(new Uri(Config.CloudProxy));
+                client.Proxy = proxy;
+            }
+
             ManageDownloads();
         }
 
@@ -167,7 +174,8 @@ namespace Simulator.Web
                             AssetGuid = assetGuid,
                             Type = typeString,
                             Name = name,
-                            LocalPath = localPath
+                            LocalPath = localPath,
+                            DateAdded = DateTime.UtcNow.ToString()
                         };
                         assetService.Add(model);
                         Debug.Log($"{name} Download Complete.");
@@ -208,7 +216,8 @@ namespace Simulator.Web
                 Download download = downloads.FirstOrDefault(d => d.uri.OriginalString == url);
                 if (download == null)
                 {
-                    throw new Exception($"Cannot remove download from download queue: {url} is not in the download queue.");
+                    Debug.LogWarning($"Cannot remove download from download queue: {url} is not in the download queue.");
+                    return;
                 }
 
                 download.valid = false;
