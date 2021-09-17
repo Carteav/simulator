@@ -92,17 +92,16 @@ void CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
 }
 
 
-[numthreads(1,1,1)]
+[numthreads(8,8,1)]
 void CARTEAV_CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
 {
-    const int xIndex = id.x;
-    if (xIndex > _CustomSectors || id.y >= _CustomPoints) //id.x >= (uint) _MeasurementsPerRotation ||
+    const int xIndex = id.x, yIndex = id.y;
+    if (xIndex >= (uint)_CustomSectors || yIndex >= _CustomSize[xIndex])
         return;
-    const int index = xIndex * _CustomPoints + id.y;//_CustomIndex[xIndex] + id.y;//
+    const int index = xIndex * _CustomPoints + yIndex;
     const float lat = _CustomPitch[index];
-    const float lon = _CustomYaw [index]; //id.x * _PackedVec.y;
+    const float lon = _CustomYaw[index];
     float3 dir = normalize(LatlongToDirectionCoordinate(float2(lon, lat)));
-    //dir = float3(lon, lat, 0);
     const float4 sample = _InputCubemapTexture.SampleLevel(sampler_InputCubemapTexture, dir, 0);
     const float4 sampleBL = _InputCubemapTexture.SampleLevel(sampler_LinearClamp, dir, 0);
 
@@ -133,82 +132,5 @@ void CARTEAV_CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
         #endif
 
         _Output[index] = float4(position, intensity);
-    }
-}
-
-uint2 getXY(float pitch, float yaw, float4 _ScaleDistance, float4 _TexSize)
-{
-    const float sinLatitudeAngle = sin(pitch); //_SinLatitudeAngles[id.y];
-    const float cosLatitudeAngle = cos(pitch); //_CosLatitudeAngles[id.y];
-
-    const int indexOffset = 0; //id.y * _MeasurementsPerRotation;
-    const float dy = sinLatitudeAngle; //cosLatitudeAngle;
-    const float rProjected = cosLatitudeAngle; //sinLatitudeAngle;
-
-    //const float sinDelta = sin(id.x * 0.01745329 * _LongitudeAngles.z);
-    //const float cosDelta = cos(id.x * 0.01745329 * _LongitudeAngles.z);
-    const float sinLongitudeAngle = sin(yaw);
-    //_LongitudeAngles.x * cosDelta - _LongitudeAngles.y * sinDelta;
-    const float cosLongitudeAngle = cos(yaw);
-    //_LongitudeAngles.y * cosDelta + _LongitudeAngles.x * sinDelta;
-
-    const float dz = rProjected * sinLongitudeAngle;
-    const float dx = rProjected * cosLongitudeAngle;
-
-    const float scale = _ScaleDistance.z / dz;
-    const float xx = dx * scale;
-    const float yy = dy * scale;
-    const int x = (int)(xx / _ScaleDistance.x + _TexSize.x * 0.5);
-    const int y = (int)(yy / _ScaleDistance.y + _TexSize.y * 0.5);
-    return uint2(x, y);
-}
-
-[numthreads(8,8,1)]
-void CARTEAV_TEMP_CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
-{
-    int xIndex = 0;
-    for (xIndex = 0; xIndex < _CustomSectors; xIndex++)
-    {
-        if (id.y >= (uint)_CustomSize[xIndex]) //id.x >= (uint) _MeasurementsPerRotation ||
-            continue;
-
-        const float lat = _CustomPitch[xIndex * _CustomPoints + id.y] * 4;
-        const float lon = _CustomYaw[xIndex * _CustomPoints + id.y] * 4; //id.x * _PackedVec.y;
-
-        float3 dir = normalize(LatlongToDirectionCoordinate(float2(lon, lat)));
-        //dir = normalize(float3(lon,lat,0));
-        const float4 sample = _InputCubemapTexture.SampleLevel(sampler_InputCubemapTexture, dir, 0);
-        const float4 sampleBL = _InputCubemapTexture.SampleLevel(sampler_LinearClamp, dir, 0);
-
-        float distance = 2.0f * DecodeFloatRGB(sample.rgb);
-        const float distanceBL = 2.0f * DecodeFloatRGB(sampleBL.rgb);
-
-        float intensity = sample.a;
-        const float intensityBL = sampleBL.a;
-
-        const float distDiff = abs(distance - distanceBL) * _PackedVec.x;
-        if (distDiff < 0.1)
-        {
-            distance = distanceBL;
-            intensity = intensityBL;
-        }
-
-        const int index = xIndex + id.y * _MeasurementsPerRotation;
-
-        if (distance * _PackedVec.x < _PackedVec.z)
-        {
-            _Output[index] = float4(0, 0, 0, 0);
-        }
-        else
-        {
-            dir = mul(_RotMatrix, float4(dir, 1)).xyz;
-            float3 position = _Origin.xyz + normalize(dir) * distance * _PackedVec.x;
-
-            #ifndef COMPENSATED
-            position = mul(_Transform, float4(position, 1)).xyz;
-            #endif
-
-            _Output[index] = float4(position, intensity);
-        }
     }
 }

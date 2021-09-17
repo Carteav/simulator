@@ -26,7 +26,7 @@ namespace Simulator.Sensors
     [RequireComponent(typeof(Camera))]
     public class CarteavLidarBase : SensorBase
     {
-        private static readonly Matrix4x4 LidarTransform = new Matrix4x4(new Vector4(0, -1, 0, 0),
+        protected static readonly Matrix4x4 LidarTransform = new Matrix4x4(new Vector4(0, -1, 0, 0),
             new Vector4(0, 0, 1, 0), new Vector4(1, 0, 0, 0), Vector4.zero);
 
         protected static class Properties
@@ -49,7 +49,6 @@ namespace Simulator.Sensors
             // Custom Shader properties:
             public static readonly int PointsCustom = Shader.PropertyToID("_CustomPoints");
             public static readonly int SectorsCustom = Shader.PropertyToID("_CustomSectors");
-            public static readonly int IdxCustom = Shader.PropertyToID("_CustomIdx");
             public static readonly int SizeCustom = Shader.PropertyToID("_CustomSize");
             public static readonly int IndexCustom = Shader.PropertyToID("_CustomIndex");
             public static readonly int YawCustom = Shader.PropertyToID("_CustomYaw");
@@ -90,11 +89,11 @@ namespace Simulator.Sensors
 
         public ComputeShader computeShader;
 
-        private BridgeInstance Bridge;
+        protected BridgeInstance Bridge;
 
-        private Publisher<PointCloudData> Publish;
+        protected Publisher<PointCloudData> Publish;
 
-        uint Sequence;
+        protected uint Sequence;
 
         private float NextCaptureTime;
 
@@ -140,9 +139,9 @@ namespace Simulator.Sensors
         private ShaderTagId passId;
         protected ComputeShader cs;
 
-        private Vector4[] Points;
+        protected Vector4[] Points;
 
-        private ComputeBuffer PointCloudBuffer;
+        protected ComputeBuffer PointCloudBuffer;
         private ComputeBuffer LatitudeAnglesBuffer;
 
         private ProfilerMarker RenderMarker = new ProfilerMarker("Lidar.Render");
@@ -151,7 +150,7 @@ namespace Simulator.Sensors
 
         private float MaxAngle;
         private float DeltaLongitudeAngle;
-        private int CurrentLaserCount;
+        protected int CurrentLaserCount;
         private int CurrentMeasurementsPerRotation;
         private float CurrentFieldOfView;
         private List<float> CurrentVerticalRayAngles;
@@ -287,10 +286,6 @@ namespace Simulator.Sensors
 
             if (PointCloudMaterial != null)
                 PointCloudMaterial.SetBuffer(Properties.PointCloud, PointCloudBuffer);
-                    
-            SensorCamera.fieldOfView = FieldOfView;
-            SensorCamera.nearClipPlane = MinDistance;
-            SensorCamera.farClipPlane = MaxDistance;
         }
 
         protected void CustomRender(ScriptableRenderContext context, HDCamera hd)
@@ -355,9 +350,9 @@ namespace Simulator.Sensors
                 Reset();
             }
 
-            /*SensorCamera.fieldOfView = FieldOfView;
+            SensorCamera.fieldOfView = FieldOfView;
             SensorCamera.nearClipPlane = MinDistance;
-            SensorCamera.farClipPlane = MaxDistance;*/
+            SensorCamera.farClipPlane = MaxDistance;
 
             CheckTexture();
             CheckCapture();
@@ -401,12 +396,13 @@ namespace Simulator.Sensors
             }
         }
 
-        private void SendMessage()
+        protected virtual void SendMessage()
         {
             if (!(Bridge is { Status: Status.Connected }))
                 return;
 
             var worldToLocal = LidarTransform;
+            
             if (Compensated)
             {
                 worldToLocal = worldToLocal * transform.worldToLocalMatrix;

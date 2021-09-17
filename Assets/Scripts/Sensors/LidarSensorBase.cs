@@ -39,7 +39,8 @@ namespace Simulator.Sensors
         protected float CurrentMaxDistance;
 
         // Horizontal FOV of the camera
-        protected const float HorizontalAngleLimit = 15.0f;
+        [SerializeField]
+        protected  float HorizontalAngleLimit = 15.0f;
 
         // List vertical angles for each ray.
         //
