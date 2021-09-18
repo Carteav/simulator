@@ -202,7 +202,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2cb1ecfb223b6f96c82153a712e54499, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: temp lidar temp
+  Name: m1 lidar
   Topic: /lidar
   Frame: frame
   ParentTransform: {fileID: 0}

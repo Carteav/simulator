@@ -42,10 +42,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1559022459245937123}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4ff83cc872c616a8baae1c27b2a0032f, type: 3}
+  m_Script: {fileID: 11500000, guid: 762e6c7c18f134b13a548bfab608bca2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: Bpearl Lidar
+  Name: bpearl lidar
   Topic: /lidar
   Frame: frame
   ParentTransform: {fileID: 0}
@@ -57,7 +57,7 @@ MonoBehaviour:
   MinDistance: 0.5
   MaxDistance: 100
   RotationFrequency: 5
-  MeasurementsPerRotation: 360
+  MeasurementsPerRotation: 1500
   Compensated: 1
   PointSize: 2
   PointColor: {r: 1, g: 0, b: 0, a: 1}
@@ -68,9 +68,9 @@ MonoBehaviour:
   PointCloudTransform: 1
   custom: 1
   anglesFile: rs_bpearl.csv
-  angleLayouts: 10
-  anglesPerLayout: 9984
-  timePerLayout: 0.1
+  angleLayouts: 1
+  anglesPerLayout: 0
+  timePerLayout: 0
 --- !u!114 &-1550979642310434975
 MonoBehaviour:
   m_ObjectHideFlags: 0

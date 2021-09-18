@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1048874624813667386}
-  - component: {fileID: -2316828837867217421}
   - component: {fileID: -9194991194426653100}
   - component: {fileID: 4048006536860647331}
+  - component: {fileID: 5294421419505893218}
   m_Layer: 0
   m_Name: LivoxLidar
   m_TagString: Untagged
@@ -33,44 +33,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &-2316828837867217421
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1559022459245937123}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1540f0f62423429aeb13487a009de57d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  Name: Livox Lidar
-  Topic: /lidar
-  Frame: frame
-  ParentTransform: {fileID: 0}
-  TemplateIndex: 0
-  VerticalRayAngles: []
-  LaserCount: 32
-  FieldOfView: 40
-  CenterAngle: 10
-  MinDistance: 0.5
-  MaxDistance: 100
-  RotationFrequency: 5
-  MeasurementsPerRotation: 360
-  Compensated: 1
-  PointSize: 2
-  PointColor: {r: 1, g: 0, b: 0, a: 1}
-  Angle: 1.5707964
-  CubemapSize: 1024
-  computeShader: {fileID: 7200000, guid: 9548b930b6e9ac145bba9924d3a99f6a, type: 3}
-  performanceLoad: 1
-  PointCloudTransform: 1
-  custom: 1
-  anglesFile: livox_mid70.csv
-  angleLayouts: 10
-  anglesPerLayout: 9984
-  timePerLayout: 0.1
 --- !u!114 &-9194991194426653100
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -228,3 +190,41 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
+--- !u!114 &5294421419505893218
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1559022459245937123}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fb582737af8334a37b61f1344d5dc30c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Name: livox lidar
+  Topic: /lidar
+  Frame: frame
+  ParentTransform: {fileID: 0}
+  TemplateIndex: 0
+  VerticalRayAngles: []
+  LaserCount: 32
+  FieldOfView: 40
+  CenterAngle: 10
+  MinDistance: 0.5
+  MaxDistance: 100
+  RotationFrequency: 5
+  MeasurementsPerRotation: 1500
+  Compensated: 1
+  PointSize: 2
+  PointColor: {r: 1, g: 0, b: 0, a: 1}
+  Angle: 1.5707964
+  CubemapSize: 1024
+  computeShader: {fileID: 7200000, guid: 9548b930b6e9ac145bba9924d3a99f6a, type: 3}
+  performanceLoad: 1
+  PointCloudTransform: 1
+  custom: 1
+  anglesFile: livox_mid70.csv
+  angleLayouts: 10
+  anglesPerLayout: 9984
+  timePerLayout: 0.1
