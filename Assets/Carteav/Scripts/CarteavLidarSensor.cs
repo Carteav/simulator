@@ -184,7 +184,7 @@ namespace Simulator.Sensors
             try
             {
                 // Will not overwrite if the destination file already exists.
-                System.IO.File.Copy(path + $"/Carteav/{anglesFile}", path + $"/../simulator_Data/{anglesFile}", true);
+                System.IO.File.Copy(path + $"/Carteav/Resources/Angles/{anglesFile}", path + $"/../simulator_Data/{anglesFile}", true);
             }
             // Catch exception if the file was already copied.
             catch (IOException copyError)
@@ -193,7 +193,7 @@ namespace Simulator.Sensors
             }
 
             //Read LIDAR angles file
-            GetTwoArraysFromFile(path + $"/Carteav/{anglesFile}");
+            GetTwoArraysFromFile(path + $"/Carteav/Resources/Angles/{anglesFile}");
         }
 
         private void ReleaseCustomBuffers(LayoutData layoutData)
