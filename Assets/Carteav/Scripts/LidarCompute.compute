@@ -1,0 +1,163 @@
+/**
+* Copyright (c) 2021 LG Electronics, Inc.
+*
+* This software contains code licensed as described in LICENSE.
+*
+*/
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+
+#pragma kernel CubeCompute                  CUBE_COMPUTE=CubeCompute
+#pragma kernel CubeComputeComp              CUBE_COMPUTE=CubeComputeComp          COMPENSATED
+#pragma kernel CarteavCubeCompute           CARTEAV_CUBE_COMPUTE=CarteavCubeCompute
+#pragma kernel CarteavCubeComputeComp       CARTEAV_CUBE_COMPUTE=CarteavCubeComputeComp          COMPENSATED
+
+CBUFFER_START(cb0)
+int _LaserCount;
+int _MeasurementsPerRotation;
+
+float4 _Origin;
+float4x4 _Transform;
+float4x4 _RotMatrix;
+float4 _PackedVec; // x: distance max, y: angle delta, z: distance min
+
+// Custom Properties:
+int _CustomPoints;
+int _CustomSectors;
+int _CustomProjectAngles;
+//
+CBUFFER_END
+
+TextureCube<float4> _InputCubemapTexture;
+RWStructuredBuffer<float4> _Output;
+StructuredBuffer<float> _LatitudeAngles;
+
+// Custom Buffers:
+StructuredBuffer<int> _CustomSize;
+StructuredBuffer<int> _CustomIndex;
+StructuredBuffer<float> _CustomYaw;
+StructuredBuffer<float> _CustomPitch;
+//
+
+SamplerState sampler_LinearClamp;
+SamplerState sampler_InputCubemapTexture;
+
+float DecodeFloatRGB(float3 rgb)
+{
+    return rgb.r + rgb.g / 255.0f + rgb.b / 65025.0f;
+}
+
+[numthreads(8,8,1)]
+void CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= (uint)_MeasurementsPerRotation || id.y >= (uint)_LaserCount)
+        return;
+
+    const float lat = _LatitudeAngles[id.y];
+    const float lon = id.x * _PackedVec.y;
+    float3 dir = normalize(LatlongToDirectionCoordinate(float2(lon, lat)));
+
+    const float4 sample = _InputCubemapTexture.SampleLevel(sampler_InputCubemapTexture, dir, 0);
+    const float4 sampleBL = _InputCubemapTexture.SampleLevel(sampler_LinearClamp, dir, 0);
+
+    float distance = 2.0f * DecodeFloatRGB(sample.rgb);
+    const float distanceBL = 2.0f * DecodeFloatRGB(sampleBL.rgb);
+
+    float intensity = sample.a;
+    const float intensityBL = sampleBL.a;
+
+    const float distDiff = abs(distance - distanceBL) * _PackedVec.x;
+    if (distDiff < 0.1)
+    {
+        distance = distanceBL;
+        intensity = intensityBL;
+    }
+
+    const int index = id.x + id.y * _MeasurementsPerRotation;
+
+    if (distance * _PackedVec.x < _PackedVec.z)
+    {
+        _Output[index] = float4(0, 0, 0, 0);
+    }
+    else
+    {
+        dir = mul(_RotMatrix, float4(dir, 1)).xyz;
+        float3 position = _Origin.xyz + normalize(dir) * distance * _PackedVec.x;
+
+        #ifndef COMPENSATED
+        position = mul(_Transform, float4(position, 1)).xyz;
+        #endif
+
+        _Output[index] = float4(position, intensity);
+    }
+}
+
+float3 CarteavLatlongToDirectionCoordinate(float2 coord)
+{
+    float theta = coord.y;
+    float phi = coord.x;
+
+    float cosTheta = cos(theta);
+    float sinTheta = sqrt(1.0 - min(1.0, cosTheta*cosTheta));
+    float cosPhi = cos(phi);
+    float sinPhi = sin(phi);
+
+    float3 direction = float3(sinTheta*cosPhi, cosTheta, sinTheta*sinPhi);
+    direction.xy *= -1.0;
+    return direction;
+}
+
+[numthreads(8,8,1)]
+void CARTEAV_CUBE_COMPUTE(uint3 id : SV_DispatchThreadID)
+{
+    const int xIndex = id.x, yIndex = id.y;
+    if (xIndex >= (uint)_CustomSectors || yIndex >= _CustomSize[xIndex])
+        return;
+    const int index = xIndex * _CustomPoints + yIndex;
+    const float lat = _CustomPitch[index];
+    const float lon = _CustomYaw[index];
+    float3 dir;//= float3(0,0,0);//float3(lon,lat,1);//normalize(LatlongToDirectionCoordinate(float2(lon, lat)));
+    if (_CustomProjectAngles == 1)
+    {
+        dir = normalize(CarteavLatlongToDirectionCoordinate(float2(lon, lat)));
+    }
+    else
+    {
+        dir = float3(lon,lat,1);
+    }
+    
+    
+    const float4 sample = _InputCubemapTexture.SampleLevel(sampler_InputCubemapTexture, dir, 0);
+    const float4 sampleBL = _InputCubemapTexture.SampleLevel(sampler_LinearClamp, dir, 0);
+
+    float distance = 2.0f * DecodeFloatRGB(sample.rgb);
+    const float distanceBL = 2.0f * DecodeFloatRGB(sampleBL.rgb);
+
+    float intensity = sample.a;
+    const float intensityBL = sampleBL.a;
+
+    const float distDiff = abs(distance - distanceBL) * _PackedVec.x;
+    if (distDiff < 0.1)
+    {
+        distance = distanceBL;
+        intensity = intensityBL;
+    }
+
+    if (distance * _PackedVec.x < _PackedVec.z)
+    {
+        _Output[index] = float4(0, 0, 0, 0);
+    }
+    else
+    {
+        dir = mul(_RotMatrix, float4(dir, 1)).xyz;
+        float3 position = _Origin.xyz + normalize(dir) * distance * _PackedVec.x;
+
+        #ifndef COMPENSATED
+        position = mul(_Transform, float4(position, 1)).xyz;
+        #endif
+
+        _Output[index] = float4(position, intensity);
+    }
+}
+
+

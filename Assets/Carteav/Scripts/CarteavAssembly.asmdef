@@ -1,0 +1,23 @@
+{
+    "name": "CarteavAssembly",
+    "rootNamespace": "",
+    "references": [
+        "GUID:43bb230cc5d89654fb9c4da20660d5b4",
+        "GUID:8c14360cd7563c841b92a26bfe7df07f",
+        "GUID:45f681528d86b6c41b791e85f15970bc",
+        "GUID:76dd2468be63a2f4c92b1bfffe8c082f",
+        "GUID:df380645f10b7bc4b97d4f5eb6303d95",
+        "GUID:457756d89b35d2941b3e7b37b4ece6f1",
+        "GUID:d92602f5fd27bc541811f89bdb176660",
+        "GUID:a84f5c30c5454e348b65b44d49b4aa5b"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
