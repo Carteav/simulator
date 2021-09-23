@@ -29,7 +29,8 @@
 .LSOverride
 
 # Project specific
-/AssetBundles/
+/AssetBundles/Vehicles/
+/AssetBundles/Sensors/
 /Assets/External/Restricted/
 /Assets/External/Restricted.meta
 /Assets/External/Tests/
