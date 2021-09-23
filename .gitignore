@@ -58,3 +58,6 @@
 /heu_settings.ini
 **/HoudiniEngineUnity/
 **/HoudiniEngineUnity.meta
+
+# Rider
+/.idea/
