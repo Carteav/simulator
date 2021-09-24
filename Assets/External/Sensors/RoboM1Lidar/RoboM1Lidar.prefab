@@ -199,10 +199,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1559022459245937123}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2cb1ecfb223b6f96c82153a712e54499, type: 3}
+  m_Script: {fileID: 11500000, guid: d63f0dd6e7587db4c8be6d1578f5c7f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: m1 lidar
+  Name: Robosense M1 Lidar
   Topic: /lidar
   Frame: frame
   ParentTransform: {fileID: 0}
@@ -228,3 +228,4 @@ MonoBehaviour:
   angleLayouts: 1
   anglesPerLayout: 0
   timePerLayout: 0
+  projectAngles: 0

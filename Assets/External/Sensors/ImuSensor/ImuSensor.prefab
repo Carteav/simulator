@@ -40,12 +40,12 @@ MonoBehaviour:
   m_GameObject: {fileID: 7463586298583900606}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 697642b7c52d3a44bbf1280e1e7ffea2, type: 3}
+  m_Script: {fileID: 11500000, guid: 789403230c3fbc89a9490431690381e5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: ImuSensor
+  Name: Imu Sensor
   Topic: /imu
-  Frame: imu
+  Frame: frame
   ParentTransform: {fileID: 0}
   CorrectedTopic: 
   CorrectedFrame: 

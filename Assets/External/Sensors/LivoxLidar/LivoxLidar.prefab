@@ -199,10 +199,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 1559022459245937123}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb582737af8334a37b61f1344d5dc30c, type: 3}
+  m_Script: {fileID: 11500000, guid: 5db34c7c1012128dc973cdef575a564a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  Name: livox lidar
+  Name: Livox Lidar
   Topic: /lidar
   Frame: frame
   ParentTransform: {fileID: 0}
