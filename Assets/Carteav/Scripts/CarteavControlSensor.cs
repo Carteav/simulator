@@ -1,17 +1,14 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
-using Carteav;
-using Carteav.Messages;
-using OsmSharp.API;
 using Simulator.Bridge;
-using Simulator.Bridge.Data;
-
 using Simulator.Sensors;
 using Simulator.Sensors.UI;
 using UnityEngine;
 using System.Linq;
+using Simulator.Bridge.Data.Ros;
 using Simulator.Utilities;
+using Time = UnityEngine.Time;
+using Vector3 = UnityEngine.Vector3;
 
 namespace Carteav
 {
@@ -32,8 +29,8 @@ namespace Carteav
 
         [SerializeField] private string PathTopic;
         [SerializeField] private string BoundriesTopic;
-        
-
+        [SerializeField] private PolygonCollider2D collider;
+        [SerializeField] private Rigidbody2D rigidBody2D;
         private CartState state;
         private CartPath path;
         private int currentPointIndex;
@@ -42,11 +39,22 @@ namespace Carteav
         private float MaxSteering = 0.5f;
         private float MaxAcceleration = 20f;
         private float PointReachRange = 2f;
-        private DataVisualizer visualizer;
+        private DataHandler handler;
         private SiteBoundaries boundaries;
+        private List<CollisionData> collisions = new List<CollisionData>();
+        private Rigidbody rigidBody;
+        private Vector3 velocity;
+        private float startTime;
+
+        public void Start()
+        {
+            rigidBody = transform.parent.GetComponentInChildren<Rigidbody>();
+            startTime = Time.time;
+        }
 
         public void Update()
         {
+            velocity = rigidBody.velocity;
             switch (state)
             {
                 case CartState.BoundaryCheck:
@@ -56,6 +64,16 @@ namespace Carteav
                     FollowPathTick();
                     break;
             }
+        }
+        
+        protected override void Initialize()
+        {
+            //throw new NotImplementedException();
+        }
+
+        protected override void Deinitialize()
+        {
+            //throw new NotImplementedException();
         }
         
         private bool CheckInBoundaries()
@@ -70,28 +88,18 @@ namespace Carteav
                     if (position.IsInPolygon(polygon.Points))
                     {
                         // Inside one of the holes in the polygon - non-permitted area
-                        Debug.Log($"Cart inside non-permitted hole area at point {position}");
+                        //Debug.Log($"Cart inside non-permitted hole area at point {position}");
                         return false;
                     }
                 }
             }
             else
             {
-                Debug.Log($"Cart left main boundary area at point {position}");
+                //Debug.Log($"Cart left main boundary area at point {position}");
                 return false;
             }
 
             return true;
-        }
-
-        protected override void Initialize()
-        {
-            //throw new NotImplementedException();
-        }
-
-        protected override void Deinitialize()
-        {
-            //throw new NotImplementedException();
         }
 
         public override void OnBridgeSetup(BridgeInstance bridge)
@@ -102,15 +110,16 @@ namespace Carteav
             CartInput = GetComponentInChildren<SimcartInput>();
             state = CartState.Inactive;
             CartInput = transform.parent.GetComponentInChildren<SimcartInput>();
+            
             cartTransform = transform.parent;
-            visualizer = FindObjectOfType<DataVisualizer>();
+            handler = FindObjectOfType<DataHandler>();
 
             var plugin = bridge.Plugin;
 
-            var ros2Factory = bridge.Plugin.Factory;
+            var ros2Factory = plugin.Factory;
             ros2Factory.RegSubscriber<CartPath, Carteav.Messages.CartPath>(plugin,
                 (path) => new CartPath(path));
-            ros2Factory.RegSubscriber<SiteBoundaries, Carteav.Messages.SiteBoundries>(plugin,
+            ros2Factory.RegSubscriber<SiteBoundaries, Messages.SiteBoundries>(plugin,
                 (boundries) => new SiteBoundaries(boundries));
 
             bridge.AddSubscriber(PathTopic, PathSubscribe);
@@ -125,16 +134,23 @@ namespace Carteav
         public override void OnVisualizeToggle(bool state)
         {
             Debug.Log("Visualize toggle control sensor");
+            handler.ToggleBoundaries(state);
         }
 
         public void OnBoundariesReceived(SiteBoundaries boundaries)
         {
             this.boundaries = boundaries;
+            var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
+            
+            
+            
             Debug.Log($"Boundaries received {boundaries.MultiPolygons.Count}.");
-            if (visualizer != null)
+            if (handler != null)
             {
-                visualizer.VisualizeBoundaries(boundaries, 1f);
+                handler.HandleBoundaries(boundaries);
             }
+
+            state = CartState.BoundaryCheck;
         }
 
 
@@ -143,11 +159,11 @@ namespace Carteav
             Debug.Log($"Received path {path.PathId}");
 
             //FollowPath(path);
-            if (visualizer != null)
+            if (handler != null)
             {
                 Vector3 offset = cartTransform.position - path.Points[0].Point;
                 offset.y = 0;
-                visualizer.VisualizePath(path, offset);
+                handler.HandlePath(path, offset);
             }
         }
 
@@ -206,9 +222,51 @@ namespace Carteav
                       $"Distance:{distance}  " +
                       $"Index:{currentPointIndex}  Towards:{towards}  Normalized:{towardsNormalized}");
         }
+
+
+        private void OnCollisionEnter(Collision other)
+        {
+            Vector3 normal = other.contacts[0].normal;
+            collisions.Add(new CollisionData
+            {
+                ObjectName = other.gameObject.name,
+                Position = transform.position,
+                Velocity = other.relativeVelocity,
+                YawAngle = 90 - (Vector3.Angle(velocity, -normal)),
+                Time = Time.time - startTime
+            });
+        }
+                                 
+        private void OnTriggerEnter2D(Collider2D other)
+        {
+            var mapBoundary = other.gameObject.GetComponent<MapBoundary>();
+            if (mapBoundary.Type == MapBoundary.BoundaryType.RestrictedArea)
+            {
+                Debug.Log("restricted area entered");
+            }
+        }
+
+        private void OnTriggerExit2D(Collider2D other)
+        {
+            var mapBoundary = other.gameObject.GetComponent<MapBoundary>();  
+            if (mapBoundary.Type == MapBoundary.BoundaryType.MainArea) 
+            {                                                                
+                Debug.Log("main area exited");                        
+            }                                                                
+        }
+        
+        /*
+            Should be: x=-y`;y=z`; z=x` according to manual:
+            https://www.svlsimulator.com/docs/getting-started/conventions/#converting-between-coordinate-systems
+        */
+        public static Vector3 ConvertCoordinates(Point coords)
+        {
+            return new Vector3((float)coords.x, (float)coords.z, (float)coords.y);
+        }
     }
 
-
+    
+    
     public class CartPath
     {
         public List<CartPoint> Points;
@@ -241,7 +299,7 @@ namespace Carteav
         {
             var v = pointStruct.point; 
             //Point = new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y };
-            Point = new Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+            Point = CarteavControlSensor.ConvertCoordinates(v);
             MAXVelocityMps = pointStruct.max_velocity_mps;
             ReqVelocityMps = pointStruct.req_velocity_mps;
             CurrentEtaSec = pointStruct.current_eta_sec;
@@ -278,15 +336,25 @@ namespace Carteav
     public class Polygon
     {
         public List<Vector3> Points;
+        public Vector3 Offset;
         public Polygon(Carteav.Messages.Polygon polygon)
         {
             Points = polygon.points.ToList()
-                .ConvertAll(v => new Vector3() { x = -(float)v.x, y = (float)v.z, z = -(float)v.y });//should be: x=-y`;y=z`; z=x`;
+                .ConvertAll(CarteavControlSensor.ConvertCoordinates);
         }
 
         public Polygon() { }
     }
 
+    public class CollisionData
+    {
+        public string ObjectName;
+        public Vector3 Position;
+        public float YawAngle;
+        public Vector3 Velocity;
+        public float Time;
+    }
+    
     public static class Extensions
     {
         public static bool IsInPolygon(this Vector3 testPoint, IList<Vector3> vertices)

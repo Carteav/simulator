@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Carteav
 {
-    public class DataVisualizer : MonoBehaviour
+    public class DataHandler : MonoBehaviour
     {
 
         [SerializeField] private MapBoundary boundaryPrefab;
@@ -39,7 +39,7 @@ namespace Carteav
                     }
                 }
             };
-            VisualizeBoundaries(test, 1f);
+            HandleBoundaries(test);
         }
 
         public LineRenderer PathRenderer
@@ -71,7 +71,7 @@ namespace Carteav
         private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.1f, 0.0f);
 
 
-        public void VisualizePath(CartPath path, Vector3 offset)
+        public void HandlePath(CartPath path, Vector3 offset)
         {
             PathRenderer.positionCount = path.Points.Count + 2;
             //Debug.Log($"Setting {path.Points.Count} points");
@@ -100,20 +100,24 @@ namespace Carteav
             }
         }
 
+
+        public void ToggleBoundaries(bool isShown)
+        {
+            foreach (var mapBoundary in boundariesInUse)
+            {
+                mapBoundary.Renderer.enabled = isShown;
+            }
+        }
         
-        
-        
-        public void VisualizeBoundaries(SiteBoundaries boundaries, float scale)
+        public void HandleBoundaries(SiteBoundaries boundaries)
         {
             boundariesInUse.ForEach(boundary => pools.ReturnInstance(boundary.gameObject));
             boundariesInUse.Clear();
             var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
-            var offset = new Vector3();
-            // mainAreaPolygon.Points.ForEach(p => offset += p);
-            // offset /= mainAreaPolygon.Points.Count;
+           
             
             MapBoundary mainArea = pools.GetInstance(boundaryPrefab.gameObject).GetComponent<MapBoundary>();
-            InitBoundary(mainArea, mainAreaPolygon, offset, scale);
+            InitBoundary(mainArea, mainAreaPolygon);
             var mainBoundaryTransform = mainArea.transform;
             mainBoundaryTransform.position = boundaryOrientationTransform.position;
             mainBoundaryTransform.localScale = boundaryOrientationTransform.localScale;
@@ -123,7 +127,7 @@ namespace Carteav
             foreach (var hole in holes)
             {
                 var holeObj = pools.GetInstance(boundaryHolePrefab.gameObject).GetComponent<MapBoundary>();
-                InitBoundary(holeObj, hole, offset, scale);
+                InitBoundary(holeObj, hole);
                 var holeTransform = holeObj.transform;
                 holeTransform.parent = mainBoundaryTransform;
                 holeTransform.localPosition = new Vector3(0, 0, -0.01f);
@@ -133,22 +137,21 @@ namespace Carteav
             
         }
 
-        private void InitBoundary(MapBoundary boundary, Polygon polygon, Vector3 offset, float scale)
+        private void InitBoundary(MapBoundary boundary, Polygon polygon)
         {
-            var points3d = polygon.Points.ConvertAll(vec3 => (vec3 + offset) * scale);
-            boundary.PolygonCollider.points = points3d.ConvertAll(vec3 => new Vector2(vec3.x, vec3.z)).ToArray();
-            var mesh = CreatePolygonMesh(points3d);
+            var points3d = polygon.Points.ConvertAll(vec3 => vec3);
+            var points2d = points3d.ConvertAll(vec3 => new Vector2(vec3.x,vec3.z));
+            boundary.PolygonCollider.points = points2d.ToArray();
+            var mesh = CreatePolygonMesh(points3d, points2d);
             boundary.MeshFilter.mesh = mesh;
-            boundary.BoundaryOffset = offset;
+            //boundary.BoundaryOffset = polygon.Offset;
             boundariesInUse.Add(boundary);
         }
         
-        private static Mesh CreatePolygonMesh(List<Vector3> points3d)
+        private static Mesh CreatePolygonMesh(List<Vector3> points3d, List<Vector2> points2d)
         {
-            Mesh mesh = new Mesh(); //CreateMesh(points.ConvertAll(vec3 => (vec3 - com) * scale),0);
-            //polygonCollider.CreateMesh(true, true);
-            //mesh.vertices = points.ConvertAll(vec3 => (vec3-com)*scale).ToArray();
-            Triangulator triangulator = new Triangulator(points3d.ConvertAll(vec3 => new Vector2(vec3.x,vec3.z)).ToArray());
+            Mesh mesh = new Mesh(); 
+            Triangulator triangulator = new Triangulator(points2d.ToArray());
             mesh.vertices = points3d.ToArray();
             mesh.triangles = triangulator.Triangulate().Reverse().ToArray();
             mesh.RecalculateNormals();
