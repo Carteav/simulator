@@ -5,6 +5,7 @@ using Simulator.Sensors;
 using Simulator.Sensors.UI;
 using UnityEngine;
 using System.Linq;
+using Carteav.Messages;
 using Simulator.Bridge.Data.Ros;
 using Simulator.Utilities;
 using Time = UnityEngine.Time;
@@ -24,9 +25,10 @@ namespace Carteav
     {
         protected Subscriber<CartPath> PathSubscribe;
         protected Subscriber<SiteBoundaries> BoundariesSubscribe;
+        protected Publisher<BoundaryCross> BoundaryCrossPublish;
         protected BridgeInstance Bridge;
         protected SimcartInput CartInput;
-
+        
         [SerializeField] private string PathTopic;
         [SerializeField] private string BoundriesTopic;
         [SerializeField] private PolygonCollider2D collider;
@@ -46,29 +48,28 @@ namespace Carteav
         private Vector3 velocity;
         private float startTime;
 
-        public void Start()
-        {
-            rigidBody = transform.parent.GetComponentInChildren<Rigidbody>();
-            startTime = Time.time;
-        }
+        
 
         public void Update()
         {
-            velocity = rigidBody.velocity;
-            switch (state)
-            {
-                case CartState.BoundaryCheck:
-                    CheckInBoundaries();
-                    break;
-                case CartState.FollowPath:
-                    FollowPathTick();
-                    break;
-            }
+            var pos = cartTransform.position;
+            handler.Update2DPosition(new Vector2(pos.x, pos.z));
         }
+
+        private void Setup()
+        {
+            
+        }
+        
         
         protected override void Initialize()
         {
-            //throw new NotImplementedException();
+            rigidBody = transform.parent.GetComponentInChildren<Rigidbody>();
+            CartInput = transform.parent.GetComponentInChildren<SimcartInput>();
+            startTime = Time.time;
+            cartTransform = transform.parent.GetChild(0);
+            handler = FindObjectOfType<DataHandler>();
+            handler.Setup(BoundaryCrossPublish, rigidBody.gameObject);
         }
 
         protected override void Deinitialize()
@@ -76,54 +77,23 @@ namespace Carteav
             //throw new NotImplementedException();
         }
         
-        private bool CheckInBoundaries()
-        {
-            Polygon mainBoundryPolygon = boundaries.MultiPolygons[0].Polygons[0];
-            Vector3 position = transform.position;
-            if (position.IsInPolygon(mainBoundryPolygon.Points))
-            {
-                for (int i = 1; i < boundaries.MultiPolygons[0].Polygons.Count; i++)
-                {
-                    Polygon polygon = boundaries.MultiPolygons[0].Polygons[i];
-                    if (position.IsInPolygon(polygon.Points))
-                    {
-                        // Inside one of the holes in the polygon - non-permitted area
-                        //Debug.Log($"Cart inside non-permitted hole area at point {position}");
-                        return false;
-                    }
-                }
-            }
-            else
-            {
-                //Debug.Log($"Cart left main boundary area at point {position}");
-                return false;
-            }
-
-            return true;
-        }
 
         public override void OnBridgeSetup(BridgeInstance bridge)
         {
             Bridge = bridge;
             PathSubscribe = OnPathReceived;
             BoundariesSubscribe = OnBoundariesReceived;
-            CartInput = GetComponentInChildren<SimcartInput>();
-            state = CartState.Inactive;
-            CartInput = transform.parent.GetComponentInChildren<SimcartInput>();
-            
-            cartTransform = transform.parent;
-            handler = FindObjectOfType<DataHandler>();
 
-            var plugin = bridge.Plugin;
-
+            var plugin = Bridge.Plugin;
             var ros2Factory = plugin.Factory;
-            ros2Factory.RegSubscriber<CartPath, Carteav.Messages.CartPath>(plugin,
-                (path) => new CartPath(path));
-            ros2Factory.RegSubscriber<SiteBoundaries, Messages.SiteBoundries>(plugin,
-                (boundries) => new SiteBoundaries(boundries));
+            ros2Factory.RegSubscriber<CartPath, CartPathMessage>(plugin, (path) => new CartPath(path));
+            ros2Factory.RegSubscriber<SiteBoundaries, SiteBoundriesMessage>(plugin, (boundries) => new SiteBoundaries(boundries));
+            ros2Factory.RegPublisher<BoundaryCross, BoundaryCrossMessage>(plugin, Converters.ConvertToBoundaryCross);
 
-            bridge.AddSubscriber(PathTopic, PathSubscribe);
-            bridge.AddSubscriber(BoundriesTopic, BoundariesSubscribe);
+            Bridge.AddSubscriber(PathTopic, PathSubscribe);
+            Bridge.AddSubscriber(BoundriesTopic, BoundariesSubscribe);
+            BoundaryCrossPublish = Bridge.AddPublisher<BoundaryCross>(BoundriesTopic);
+            
         }
 
         public override void OnVisualize(Visualizer visualizer)
@@ -134,24 +104,20 @@ namespace Carteav
         public override void OnVisualizeToggle(bool state)
         {
             Debug.Log("Visualize toggle control sensor");
-            handler.ToggleBoundaries(state);
+            handler?.ToggleBoundaries(state);
         }
 
         public void OnBoundariesReceived(SiteBoundaries boundaries)
         {
             this.boundaries = boundaries;
-            var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
-            
-            
-            
+
             Debug.Log($"Boundaries received {boundaries.MultiPolygons.Count}.");
             if (handler != null)
             {
                 handler.HandleBoundaries(boundaries);
             }
-
-            state = CartState.BoundaryCheck;
         }
+
 
 
         public void OnPathReceived(CartPath path)
@@ -275,13 +241,13 @@ namespace Carteav
         public uint PathDurationSec;
         public bool Cyclic;
 
-        public CartPath(Carteav.Messages.CartPath path)
+        public CartPath(CartPathMessage pathMessage)
         {
-            Points = new List<CartPoint>(path.points.ToList().ConvertAll(structPoint => new CartPoint(structPoint)));
-            PathId = path.path_id;
-            PathLengthM = path.path_length_m;
-            PathDurationSec = path.path_duration_sec;
-            Cyclic = path.cyclic;
+            Points = new List<CartPoint>(pathMessage.points.ToList().ConvertAll(structPoint => new CartPoint(structPoint)));
+            PathId = pathMessage.path_id;
+            PathLengthM = pathMessage.path_length_m;
+            PathDurationSec = pathMessage.path_duration_sec;
+            Cyclic = pathMessage.cyclic;
         }
     }
 
@@ -295,17 +261,17 @@ namespace Carteav
         public bool IsJunction;
         public bool IsSpeedBumpsgoogle;
 
-        public CartPoint(Carteav.Messages.CartPoint pointStruct)
+        public CartPoint(CartPointMessage pointMessageStruct)
         {
-            var v = pointStruct.point; 
+            var v = pointMessageStruct.point; 
             //Point = new Vector3() { x = (float)v.x, y = (float)v.z, z = (float)v.y };
             Point = CarteavControlSensor.ConvertCoordinates(v);
-            MAXVelocityMps = pointStruct.max_velocity_mps;
-            ReqVelocityMps = pointStruct.req_velocity_mps;
-            CurrentEtaSec = pointStruct.current_eta_sec;
-            IsCrosswalk = pointStruct.is_crosswalk;
-            IsJunction = pointStruct.is_junction;
-            IsSpeedBumpsgoogle = pointStruct.is_speed_bumpsgoogle;
+            MAXVelocityMps = pointMessageStruct.max_velocity_mps;
+            ReqVelocityMps = pointMessageStruct.req_velocity_mps;
+            CurrentEtaSec = pointMessageStruct.current_eta_sec;
+            IsCrosswalk = pointMessageStruct.is_crosswalk;
+            IsJunction = pointMessageStruct.is_junction;
+            IsSpeedBumpsgoogle = pointMessageStruct.is_speed_bumpsgoogle;
         }
     }
 
@@ -314,7 +280,7 @@ namespace Carteav
     {
         public List<SingleSiteBoundry> MultiPolygons;
 
-        public SiteBoundaries(Carteav.Messages.SiteBoundries boundaries)
+        public SiteBoundaries(SiteBoundriesMessage boundaries)
         {
             MultiPolygons = boundaries.multi_polygons.ToList()
                 .ConvertAll(dataBoundary => new SingleSiteBoundry(dataBoundary));
@@ -326,7 +292,7 @@ namespace Carteav
     public class SingleSiteBoundry
     {
         public List<Polygon> Polygons;
-        public SingleSiteBoundry(Carteav.Messages.SingleSiteBoundry boundary)
+        public SingleSiteBoundry(Carteav.Messages.SingleSiteBoundryMessage boundary)
         {
             Polygons = boundary.polygons.ToList().ConvertAll(dataPolygon => new Polygon(dataPolygon));
         }
@@ -337,9 +303,9 @@ namespace Carteav
     {
         public List<Vector3> Points;
         public Vector3 Offset;
-        public Polygon(Carteav.Messages.Polygon polygon)
+        public Polygon(Carteav.Messages.PolygonMessage polygonMessage)
         {
-            Points = polygon.points.ToList()
+            Points = polygonMessage.points.ToList()
                 .ConvertAll(CarteavControlSensor.ConvertCoordinates);
         }
 
@@ -355,38 +321,15 @@ namespace Carteav
         public float Time;
     }
     
-    public static class Extensions
+    public class BoundaryCross
     {
-        public static bool IsInPolygon(this Vector3 testPoint, IList<Vector3> vertices)
-        {
-            if (vertices.Count < 3) return false;
-            bool isInPolygon = false;
-            var lastVertex = vertices[vertices.Count - 1];
-            foreach (var vertex in vertices)
-            {
-                if (testPoint.y.IsBetween(lastVertex.y, vertex.y))
-                {
-                    double t = (testPoint.y - lastVertex.y) / (vertex.y - lastVertex.y);
-                    double x = t * (vertex.x - lastVertex.x) + lastVertex.x;
-                    if (x >= testPoint.x) isInPolygon = !isInPolygon;
-                }
-                else
-                {
-                    if (testPoint.y == lastVertex.y && testPoint.x < lastVertex.x && vertex.y > testPoint.y)
-                        isInPolygon = !isInPolygon;
-                    if (testPoint.y == vertex.y && testPoint.x < vertex.x && lastVertex.y > testPoint.y)
-                        isInPolygon = !isInPolygon;
-                }
-
-                lastVertex = vertex;
-            }
-
-            return isInPolygon;
-        }
-
-        public static bool IsBetween(this float x, float a, float b)
-        {
-            return (x - a) * (x - b) < 0;
-        }
+        public string ObjectName;
+        public Vector3 Position;
+        public float YawAngle;
+        public Vector3 Velocity;
+        public float Time;
+        public MapBoundary.BoundaryType BoundaryType;
     }
+    
+   
 }

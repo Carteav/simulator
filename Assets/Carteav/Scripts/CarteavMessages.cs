@@ -12,9 +12,9 @@ using Vector3 = UnityEngine.Vector3;
 namespace Carteav.Messages
 {
     [MessageType("carteav_interfaces/CartPath")]
-    public struct CartPath
+    public struct CartPathMessage
     {
-        public CartPoint[] points;
+        public CartPointMessage[] points;
         public string path_id;
         public uint path_length_m;
         public uint path_duration_sec;
@@ -22,7 +22,7 @@ namespace Carteav.Messages
     }
     
     [MessageType("carteav_interfaces/CartPoint")]
-    public struct CartPoint
+    public struct CartPointMessage
     {
         public Point point;
         public double max_velocity_mps;
@@ -35,48 +35,71 @@ namespace Carteav.Messages
 
     
     [MessageType("carteav_interfaces/SiteBoundries")]
-    public struct SiteBoundries
+    public struct SiteBoundriesMessage
     {
-        public SingleSiteBoundry[] multi_polygons;
+        public SingleSiteBoundryMessage[] multi_polygons;
     }
     
     [MessageType("carteav_interfaces/SingleSiteBoundry")]
-    public struct SingleSiteBoundry
+    public struct SingleSiteBoundryMessage
     {
-        public Polygon[] polygons;
+        public PolygonMessage[] polygons;
     }
 
     [MessageType("carteav_interfaces/Polygon")]
-    public struct Polygon
+    public struct PolygonMessage
     {
         public Point[] points;
+    }
+    
+    [MessageType("carteav_interfaces/BoundaryCross")]
+    public struct BoundaryCrossMessage
+    {
+        public string object_name;
+        public Vector3 position;
+        public float yaw_angle;
+        public Vector3 velocity;
+        public float time;
+        public string boundary_type;
     }
 
 
     public static class Converters
     {
-        public static UnityEngine.Vector3 ConvertFromVector(Ros.Vector3 v)
+        public static Vector3 ConvertFromVector(Ros.Vector3 v)
         {
-            return new UnityEngine.Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+            return new Vector3() { x = (float)v.x, y = (float)v.y, z = (float)v.z };
         }
         
-        public static Ros.Vector3 ConvertToVector(UnityEngine.Vector3 v)
+        public static Ros.Vector3 ConvertToVector(Vector3 v)
         {
             return new Ros.Vector3() { x = v.x, y = v.y, z = v.z };
         }
         
-        public static  UnityEngine.Vector3 ConvertFromPoint(Ros.Point  v)
+        public static  Vector3 ConvertFromPoint(Point  v)
         {
-            return new UnityEngine.Vector3 () { x = (float)v.x, y = (float)v.y, z = (float)v.z };
+            return new Vector3 () { x = (float)v.x, y = (float)v.y, z = (float)v.z };
         }
         
         
-        public static Ros.Point ConvertToPoint(UnityEngine.Vector3 v)
+        public static Point ConvertToPoint(Vector3 v)
         {
-            return new Ros.Point() { x = v.x, y = v.y, z = v.z };
+            return new Point() { x = v.x, y = v.y, z = v.z };
         }
 
-        
+
+        public static Messages.BoundaryCrossMessage ConvertToBoundaryCross(Carteav.BoundaryCross cross)
+        {
+            return new BoundaryCrossMessage()
+            {
+                object_name = cross.ObjectName,
+                position = cross.Position,
+                yaw_angle = cross.YawAngle,
+                velocity = cross.Velocity,
+                time = cross.Time,
+                boundary_type = cross.BoundaryType.ToString()
+            };
+        }
     }
     
 }

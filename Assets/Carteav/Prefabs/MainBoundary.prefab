@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 7613499355121858195}
   - component: {fileID: 7613499355121858192}
   - component: {fileID: 5989638678500060295}
+  - component: {fileID: -4388590191595510624}
   m_Layer: 0
   m_Name: MainBoundary
   m_TagString: Untagged
@@ -130,3 +131,25 @@ MonoBehaviour:
   MeshFilter: {fileID: 7613499355121858195}
   Renderer: {fileID: 7613499355121858192}
   Type: 0
+--- !u!68 &-4388590191595510624
+EdgeCollider2D:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7613499355121858197}
+  m_Enabled: 1
+  m_Density: 1
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_UsedByEffector: 0
+  m_UsedByComposite: 0
+  m_Offset: {x: 0, y: 0}
+  m_EdgeRadius: 0
+  m_Points:
+  - {x: -0.5, y: 0}
+  - {x: 0.5, y: 0}
+  m_AdjacentStartPoint: {x: 0, y: 0}
+  m_AdjacentEndPoint: {x: 0, y: 0}
+  m_UseAdjacentStartPoint: 0
+  m_UseAdjacentEndPoint: 0

@@ -129,4 +129,4 @@ MonoBehaviour:
   PolygonCollider: {fileID: 7613499355121858193}
   MeshFilter: {fileID: 7613499355121858195}
   Renderer: {fileID: 7613499355121858192}
-  Type: 0
+  Type: 1
