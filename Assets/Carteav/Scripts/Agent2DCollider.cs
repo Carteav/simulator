@@ -1,17 +1,19 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using Carteav;
+using Carteav.Messages;
 using UnityEngine;
 
 public class Agent2DCollider : MonoBehaviour
 {
     [field: SerializeField] public PolygonCollider2D AgentCollider2D { get; set; }
     [SerializeField] private DataHandler dataHandler;
-
+    [SerializeField] private Rigidbody2D rigidbody2D;
+    private Transform agentTransform;
     private bool insideParmittedArea;
 
-    
+    private void Start()
+    {
+        agentTransform = transform;
+    }
 
     private void OnTriggerStay2D(Collider2D other) 
     { 
@@ -37,7 +39,11 @@ public class Agent2DCollider : MonoBehaviour
                         Debug.Log("main area exited");
                         dataHandler.SendBoundaryCross(new BoundaryCross()
                         {
-
+                            ObjectName = other.gameObject.name,
+                            Position = agentTransform.position,
+                            Velocity = rigidbody2D.velocity,
+                            YawAngle = agentTransform.eulerAngles.x,
+                            Time = SimulatorManager.Instance.CurrentTime
                         });
                     }
                     break;
@@ -45,7 +51,11 @@ public class Agent2DCollider : MonoBehaviour
                     Debug.Log("restricted area entered");
                     dataHandler.SendBoundaryCross(new BoundaryCross()
                     {
-
+                        ObjectName = other.gameObject.name,
+                        Position = agentTransform.position,
+                        Velocity = rigidbody2D.velocity,
+                        YawAngle = agentTransform.eulerAngles.x,
+                        Time = SimulatorManager.Instance.CurrentTime
                     });
                     break;
             }

@@ -24,6 +24,8 @@ public class VehicleController : AgentController
 
     public override Vector3 Velocity => SimpleVelocity;
     public override Vector3 Acceleration => SimpleAcceleration;
+    public delegate void OnCollision(GameObject agent, GameObject hitObject, Collision collision);
+    public event OnCollision OnCollisionEvent;
 
     private float TurnSignalTriggerThreshold = 0.2f;
     private float TurnSignalOffThreshold = 0.1f;
@@ -201,6 +203,7 @@ public class VehicleController : AgentController
         {
             ApiManager.Instance?.AddCollision(gameObject, collision.gameObject, collision);
             SimulatorManager.Instance.AnalysisManager.IncrementEgoCollision(Controller.GTID, transform.position, Dynamics.Velocity, otherVel, otherLayer);
+            OnCollisionEvent?.Invoke(gameObject, collision.gameObject, collision);
         }
     }
 
