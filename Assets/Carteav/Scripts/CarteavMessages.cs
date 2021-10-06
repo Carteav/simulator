@@ -55,9 +55,8 @@ namespace Carteav.Messages
     public struct BoundaryCrossMessage
     {
         public string object_name;
-        public Vector3 position;
-        public float yaw_angle;
-        public Vector3 velocity;
+        public Point position;
+        public Ros.Vector3 velocity;
         public double time;
         public string boundary_type;
     }
@@ -67,9 +66,9 @@ namespace Carteav.Messages
     public struct CollisionMessage
     {
         public string object_name;
-        public Vector3 position;
+        public Point position;
         public float yaw_angle;
-        public Vector3 velocity;
+        public Ros.Vector3 velocity;
         public double time;
     }
     
@@ -169,7 +168,6 @@ namespace Carteav.Messages
     {
         public string ObjectName;
         public Vector3 Position;
-        public float YawAngle;
         public Vector3 Velocity;
         public double Time;
         public MapBoundary.BoundaryType BoundaryType;
@@ -214,9 +212,8 @@ namespace Carteav.Messages
             return new BoundaryCrossMessage()
             {
                 object_name = cross.ObjectName,
-                position = cross.Position,
-                yaw_angle = cross.YawAngle,
-                velocity = cross.Velocity,
+                position = ConvertToPoint(cross.Position),
+                velocity = ConvertToVector(cross.Velocity),
                 time = cross.Time,
                 boundary_type = cross.BoundaryType.ToString()
             };
@@ -227,9 +224,9 @@ namespace Carteav.Messages
             return new CollisionMessage()
             {
                 object_name = collision.ObjectName,
-                position = collision.Position,
+                position = ConvertToPoint(collision.Position),
                 yaw_angle = collision.YawAngle,
-                velocity = collision.Velocity,
+                velocity = ConvertToVector(collision.Velocity),
                 time = collision.Time,
             };
         }

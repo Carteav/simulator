@@ -9,131 +9,143 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace Carteav
 {
-    
-
     [SensorType("Control", new[] { typeof(CartPath) })]
     public class CarteavControlSensor : SensorBase
     {
-        public SiteBoundaries Boundaries => boundaries;
         protected Subscriber<CartPath> PathSubscribe;
         protected Subscriber<SiteBoundaries> BoundariesSubscribe;
         protected Publisher<BoundaryCross> BoundaryCrossPublish;
         protected Publisher<CollisionData> CollisionPublish;
         protected BridgeInstance Bridge;
         protected SimcartInput CartInput;
-        
+
+        [SerializeField] private bool Is2DMode = true;
         [SerializeField] private string PathTopic;
         [SerializeField] private string BoundriesTopic;
-        [SerializeField] private PolygonCollider2D collider;
-        [SerializeField] private Rigidbody2D rigidBody2D;
-        
+        [SerializeField] private string CollisionTopic;
+        [SerializeField] private Agent3DCollider agent3DCollider;
+
+        private bool previousIs2DMode;
+
         private CartPath path;
         private int currentPointIndex;
         private Transform cartTransform;
         private float MaxSteering = 0.5f;
         private float MaxAcceleration = 20f;
         private float PointReachRange = 2f;
-        private DataHandler handler;
+        private DataHandler dataHandler;
         private SiteBoundaries boundaries;
         private List<CollisionData> collisions = new List<CollisionData>();
-        private Rigidbody rigidBody;
+        private Rigidbody cartRigidBody;
         private Vector3 velocity;
         private VehicleController vehicleController;
-     
+
 
         public void Update()
         {
             var pos = cartTransform.position;
-            handler.Update2DPosition(new Vector2(pos.x, pos.z));
+            dataHandler.Update2DPosition(new Vector2(pos.x, pos.z));
+            if (previousIs2DMode != Is2DMode)
+            {
+                previousIs2DMode = Is2DMode;
+                dataHandler.Is2DMode = Is2DMode;
+            }
         }
-        
-        
+
+
         protected override void Initialize()
         {
             var parent = transform.parent;
-            rigidBody = parent.GetComponentInChildren<Rigidbody>();
+            
             CartInput = parent.GetComponentInChildren<SimcartInput>();
             vehicleController = parent.GetComponentInChildren<VehicleController>();
             cartTransform = parent.GetChild(0);
-            handler = FindObjectOfType<DataHandler>();
-            handler.Setup(BoundaryCrossPublish, rigidBody.gameObject);
-            vehicleController.OnCollisionEvent += OnCollision;
+            cartRigidBody = cartTransform.GetComponentInChildren<Rigidbody>();
+            dataHandler = FindObjectOfType<DataHandler>();
+            dataHandler.Setup(BoundaryCrossPublish, cartTransform);
+            vehicleController.OnCollisionEvent += OnAgentCollision;
+            previousIs2DMode = Is2DMode;
+
+            // for 3D mode
+            agent3DCollider.Setup(cartRigidBody, BoundaryCrossPublish, cartTransform);
         }
 
-        
+
         protected override void Deinitialize()
         {
-            handler.Dispose();
+            dataHandler.Dispose();
         }
-        
+
 
         public override void OnBridgeSetup(BridgeInstance bridge)
         {
             Bridge = bridge;
             PathSubscribe = OnPathReceived;
             BoundariesSubscribe = OnBoundariesReceived;
-            
+
 
             var plugin = Bridge.Plugin;
             var ros2Factory = plugin.Factory;
             ros2Factory.RegSubscriber<CartPath, CartPathMessage>(plugin, (path) => new CartPath(path));
-            ros2Factory.RegSubscriber<SiteBoundaries, SiteBoundriesMessage>(plugin, (boundries) => new SiteBoundaries(boundries));
+            ros2Factory.RegSubscriber<SiteBoundaries, SiteBoundriesMessage>(plugin,
+                (boundries) => new SiteBoundaries(boundries));
             ros2Factory.RegPublisher<BoundaryCross, BoundaryCrossMessage>(plugin, Converters.ConvertBoundaryCross);
             ros2Factory.RegPublisher<CollisionData, CollisionMessage>(plugin, Converters.ConvertCollision);
 
             Bridge.AddSubscriber(PathTopic, PathSubscribe);
             Bridge.AddSubscriber(BoundriesTopic, BoundariesSubscribe);
             BoundaryCrossPublish = Bridge.AddPublisher<BoundaryCross>(BoundriesTopic);
-            CollisionPublish = Bridge.AddPublisher<CollisionData>(BoundriesTopic);
+            CollisionPublish = Bridge.AddPublisher<CollisionData>(CollisionTopic);
         }
 
-        
+
         public override void OnVisualize(Visualizer visualizer)
         {
-            Debug.Log("Visualize control sensor");
+            //Debug.Log("Visualize control sensor");
         }
 
-        
+
         public override void OnVisualizeToggle(bool state)
         {
-            Debug.Log("Visualize toggle control sensor");
-            handler?.ToggleBoundaries(state);
+            Debug.Log($"Visualize toggle control sensor {state}");
+            dataHandler?.ToggleData(state);
         }
 
-        
+
         public void OnBoundariesReceived(SiteBoundaries boundaries)
         {
             this.boundaries = boundaries;
 
             Debug.Log($"Boundaries received {boundaries.MultiPolygons.Count}.");
-            if (handler != null)
+            if (dataHandler != null)
             {
-                handler.HandleBoundaries(boundaries);
+                dataHandler.HandleBoundaries(boundaries);
             }
         }
-        
+
 
         public void OnPathReceived(CartPath path)
         {
             Debug.Log($"Received path {path.PathId}");
 
             //FollowPath(path);
-            if (handler != null)
+            if (dataHandler != null)
             {
                 Vector3 offset = cartTransform.position - path.Points[0].Point;
                 offset.y = 0;
-                handler.HandlePath(path, offset);
+                dataHandler.HandlePath(path, offset);
             }
         }
 
-        
-        private void OnCollision(GameObject obj, GameObject other, Collision collision)
+
+        private void OnAgentCollision(GameObject obj, GameObject other, Collision collision)
         {
             if (collision == null)
             {
                 Debug.Log($"OnCollision: collision null");
                 return;
             }
+
             Vector3 normal = collision.contacts[0].normal;
             var collisionData = new CollisionData
             {
@@ -147,8 +159,10 @@ namespace Carteav
             collisions.Add(collisionData);
             CollisionPublish(collisionData);
         }
-                                 
-      
+
+
+        #region PathFollow
+
         public void FollowPath(CartPath path)
         {
             if (path.Points == null || path.Points.Count < 2)
@@ -160,8 +174,8 @@ namespace Carteav
             currentPointIndex = 0;
             this.path = path;
         }
-        
-        
+
+
         private void FollowPathTick()
         {
             Vector3 offset = path.Points[0].Point - cartTransform.position;
@@ -200,5 +214,7 @@ namespace Carteav
                       $"Distance:{distance}  " +
                       $"Index:{currentPointIndex}  Towards:{towards}  Normalized:{towardsNormalized}");
         }
+
+        #endregion
     }
 }
