@@ -10,7 +10,7 @@ using Vector3 = UnityEngine.Vector3;
 namespace Carteav
 {
     [SensorType("Control", new[] { typeof(CartPath) })]
-    public class CarteavControlSensor : SensorBase
+    public class MapSensorBase : SensorBase
     {
         protected Subscriber<CartPath> PathSubscribe;
         protected Subscriber<SiteBoundaries> BoundariesSubscribe;
@@ -49,6 +49,7 @@ namespace Carteav
             {
                 previousIs2DMode = Is2DMode;
                 dataHandler.Is2DMode = Is2DMode;
+                agent3DCollider.gameObject.SetActive(!Is2DMode);
             }
         }
 
@@ -62,12 +63,13 @@ namespace Carteav
             cartTransform = parent.GetChild(0);
             cartRigidBody = cartTransform.GetComponentInChildren<Rigidbody>();
             dataHandler = FindObjectOfType<DataHandler>();
-            dataHandler.Setup(BoundaryCrossPublish, cartTransform);
+            dataHandler.Setup(BoundaryCrossPublish, cartTransform, Is2DMode);
             vehicleController.OnCollisionEvent += OnAgentCollision;
             previousIs2DMode = Is2DMode;
 
             // for 3D mode
             agent3DCollider.Setup(cartRigidBody, BoundaryCrossPublish, cartTransform);
+            agent3DCollider.gameObject.SetActive(!Is2DMode);
         }
 
 

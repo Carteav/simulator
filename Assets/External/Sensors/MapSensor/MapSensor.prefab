@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 6809882359904912306}
   - component: {fileID: -4367434242380197558}
   m_Layer: 17
-  m_Name: CarteavControl
+  m_Name: MapSensor
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -119,6 +119,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: Agent3DCollider
+      objectReference: {fileID: 0}
+    - target: {fileID: 7444203046824541947, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 1c68c6f2badbef369980e4196fa03e82, type: 3}

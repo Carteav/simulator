@@ -9,7 +9,6 @@ namespace Carteav
 {
     public class DataHandler : MonoBehaviour
     {
-        [SerializeField] private bool shouldExtrude3DPolygon = true;
         [SerializeField] private Agent2DCollider agentCollider2D;
         [SerializeField] private MapBoundary boundaryPrefab;
         [SerializeField] private MapBoundary boundaryHolePrefab;
@@ -22,21 +21,22 @@ namespace Carteav
 
         public bool Is2DMode
         {
-            get { return is2dMode; }
+            get { return is2DMode; }
             set
             {
-                if (is2dMode != value && currentBoundaries != null && boundariesInUse.Count > 0)
+                if (is2DMode != value && currentBoundaries != null && boundariesInUse.Count > 0)
                 {
                     Dispose();
-                    is2dMode = value;
+                    is2DMode = value;
                     HandleBoundaries(currentBoundaries);
+                    agentCollider2D.gameObject.SetActive(is2DMode);
                     return;
                 }
 
-                is2dMode = value;
+                is2DMode = value;
             }
         }
-        private bool is2dMode;
+        private bool is2DMode;
         private List<MapBoundary> boundariesInUse = new List<MapBoundary>();
         private Publisher<BoundaryCross> publishBoundaryCross;
         private Transform agentTransform;
@@ -70,11 +70,13 @@ namespace Carteav
 
 
 
-        public void Setup(Publisher<BoundaryCross> publisherBoundaryCross, Transform agentTransform)
+        public void Setup(Publisher<BoundaryCross> publisherBoundaryCross, Transform agentTransform, bool is2DMode)
         {
             this.agentTransform = agentTransform;
             publishBoundaryCross = publisherBoundaryCross;
             agentCollider2D.Setup(agentTransform);
+            agentCollider2D.gameObject.SetActive(is2DMode);
+            Is2DMode = is2DMode;
         }
 
 
@@ -156,7 +158,7 @@ namespace Carteav
             var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
 
             MapBoundary mainArea = pools.GetInstance(permittedAreaPrefab).GetComponent<MapBoundary>();
-            mainArea.Setup(mainAreaPolygon, Is2DMode, shouldExtrude3DPolygon, boundaryOrientation.parent, 
+            mainArea.Setup(mainAreaPolygon, Is2DMode, boundaryOrientation.parent, 
                 mainArea.Type.ToString(), boundaryOrientation.position, boundaryOrientation.rotation);
             boundariesInUse.Add(mainArea);
 
@@ -172,7 +174,7 @@ namespace Carteav
             {
                 var hole = holes[i];
                 var restrictedArea = pools.GetInstance(restrictedAreaPrefab).GetComponent<MapBoundary>();
-                restrictedArea.Setup(hole, Is2DMode, shouldExtrude3DPolygon, mainArea.transform, 
+                restrictedArea.Setup(hole, Is2DMode, mainArea.transform, 
                     $"{restrictedArea.Type} - {i}", restrictedOffset);
                 boundariesInUse.Add(restrictedArea);
             }

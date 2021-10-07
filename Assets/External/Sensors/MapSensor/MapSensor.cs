@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Carteav;
 using UnityEngine;
 
-public class CarteavControl : CarteavControlSensor
+public class MapSensor : MapSensorBase
 {
 
 }

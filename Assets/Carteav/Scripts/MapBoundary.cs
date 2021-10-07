@@ -23,7 +23,7 @@ namespace Carteav
         private bool is2DMode;
 
         
-        public void Setup(Polygon polygon, bool Is2DMode, bool extrudePolygon, Transform parent = null, 
+        public void Setup(Polygon polygon, bool Is2DMode, Transform parent = null, 
             string boundaryName = null, Vector3 position = default, Quaternion rotation = default)
         {
             MapBoundary boundary = this;
@@ -56,17 +56,18 @@ namespace Carteav
             }
             else
             {
-                if (extrudePolygon)
+                bool extudePolygonToHaveHeight = true;
+                if (extudePolygonToHaveHeight)
                 {
                     if (Type == BoundaryType.MainArea)
                     {
                         MeshCollider[] meshColliders = GetComponents<MeshCollider>();
                         boundary.MeshCollider = meshColliders[0];
                         boundary.MeshEdgeCollider = meshColliders[1];
-                        boundary.MeshEdgeCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extrudePolygon, true);
+                        boundary.MeshEdgeCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extudePolygonToHaveHeight, true);
                     }
 
-                    boundary.MeshCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extrudePolygon);
+                    boundary.MeshCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extudePolygonToHaveHeight);
                 }
                 else
                 {
