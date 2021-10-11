@@ -7,6 +7,10 @@ using UnityEngine;
 
 namespace Carteav
 {
+    /// <summary>
+    /// Serves as a relay between the MapSensor(on the cart) and preloaded scene objects handling 2D agent collision.
+    /// Also responsible for spawning the map boundaries and rendering recieved path on scene.
+    /// </summary>
     public class DataHandler : MonoBehaviour
     {
         [SerializeField] private Agent2DCollider agentCollider2D;
@@ -18,32 +22,9 @@ namespace Carteav
         [SerializeField] private PrefabsPools pools;
         [SerializeField] private Material waypointsMaterial;
 
-
-        public bool Is2DMode
-        {
-            get { return is2DMode; }
-            set
-            {
-                if (is2DMode != value && currentBoundaries != null && boundariesInUse.Count > 0)
-                {
-                    Dispose();
-                    is2DMode = value;
-                    HandleBoundaries(currentBoundaries);
-                    agentCollider2D.gameObject.SetActive(is2DMode);
-                    return;
-                }
-
-                is2DMode = value;
-            }
-        }
-        private bool is2DMode;
-        private List<MapBoundary> boundariesInUse = new List<MapBoundary>();
-        private Publisher<BoundaryCross> publishBoundaryCross;
-        private Transform agentTransform;
-        private LineRenderer pathRenderer;
-        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.1f, 0.0f);
-        private SiteBoundaries currentBoundaries;
-
+        /// <summary>
+        /// Renders the received path, all that's required is assigning points to PathRenderer.points
+        /// </summary>
         public LineRenderer PathRenderer
         {
             get
@@ -67,6 +48,37 @@ namespace Carteav
                 return pathRenderer;
             }
         }
+        
+        // Switching between 2D and 3D mode will change the collision method from using 2D colliders and 3D colliders
+        public bool Is2DMode
+        {
+            get { return is2DMode; }
+            set
+            {
+                if (is2DMode != value && currentBoundaries != null && boundariesInUse.Count > 0)
+                {
+                    Dispose();
+                    is2DMode = value;
+                    HandleBoundaries(currentBoundaries);
+                    agentCollider2D.gameObject.SetActive(is2DMode);
+                    return;
+                }
+
+                is2DMode = value;
+            }
+        }
+        
+        
+        
+        private bool is2DMode;
+        private List<MapBoundary> boundariesInUse = new List<MapBoundary>();
+        private Publisher<BoundaryCross> publishBoundaryCross;
+        private Transform agentTransform;
+        private LineRenderer pathRenderer;
+        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.1f, 0.0f);
+        private SiteBoundaries currentBoundaries;
+
+        
 
 
 
@@ -77,6 +89,12 @@ namespace Carteav
             agentCollider2D.Setup(agentTransform);
             agentCollider2D.gameObject.SetActive(is2DMode);
             Is2DMode = is2DMode;
+
+            var orientBoundary = GameObject.Find("BoundaryOrientation");
+            if (orientBoundary != null)
+            {
+                boundaryOrientation = orientBoundary.transform;
+            }
         }
 
 
@@ -158,7 +176,7 @@ namespace Carteav
             var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
 
             MapBoundary mainArea = pools.GetInstance(permittedAreaPrefab).GetComponent<MapBoundary>();
-            mainArea.Setup(mainAreaPolygon, Is2DMode, boundaryOrientation.parent, 
+            mainArea.Setup(mainAreaPolygon, Is2DMode, transform, 
                 mainArea.Type.ToString(), boundaryOrientation.position, boundaryOrientation.rotation);
             boundariesInUse.Add(mainArea);
 
@@ -169,7 +187,7 @@ namespace Carteav
 
             List<Polygon> holes = boundaries.MultiPolygons[0].Polygons
                 .GetRange(1, boundaries.MultiPolygons[0].Polygons.Count - 1);
-            Vector3 restrictedOffset = new Vector3(0, 0, -0.01f);
+            Vector3 restrictedOffset = new Vector3(0, 0.01f, 0);
             for (int i = 0; i < holes.Count; i++)
             {
                 var hole = holes[i];

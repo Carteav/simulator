@@ -92,7 +92,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 491928e4d0c51183cab1e6c96bd983be, type: 2}
+  - {fileID: 2100000, guid: 1d0b461aa1212ed91bdf915c10657cd7, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -126,11 +126,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fba01799de881e899a9d9ec17fc5399a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  BoundaryOffset: {x: 0, y: 0, z: 0}
-  PolygonCollider: {fileID: 7613499355121858193}
-  MeshFilter: {fileID: 7613499355121858195}
-  Renderer: {fileID: 7613499355121858192}
-  Type: 0
+  <Type>k__BackingField: 0
+  meshFilter: {fileID: 7613499355121858195}
+  meshRenderer: {fileID: 7613499355121858192}
+  polygonCollider: {fileID: 7613499355121858193}
+  edgeCollider: {fileID: -4388590191595510624}
 --- !u!68 &-4388590191595510624
 EdgeCollider2D:
   m_ObjectHideFlags: 0

@@ -47,7 +47,7 @@ public class Agent3DCollider : MonoBehaviour
         var mapBoundary = other.gameObject.GetComponentInParent<MapBoundary>();
         if (mapBoundary != null)
         {
-            if (mapBoundary.Type == MapBoundary.BoundaryType.MainArea && other == mapBoundary.MeshCollider)
+            if (mapBoundary.Type == MapBoundary.BoundaryType.MainArea && other == mapBoundary.MeshPolygonCollider)
             {
                 insidePermittedArea = true;
             }

@@ -5,6 +5,11 @@ using UnityEngine;
 
 namespace Carteav
 {
+    /// <summary>
+    /// Allocates colliders according to selected method. For 2D polygonCollider and edgeCollider and for 3D
+    /// MeshCollider and MeshEdgeCollider. The polygon collider to check if the agent was already inside when touching
+    /// the edge collider.
+    /// </summary>
     public class MapBoundary : MonoBehaviour
     {
         public enum BoundaryType
@@ -12,18 +17,19 @@ namespace Carteav
             MainArea,
             RestrictedArea
         }
+
         [field: SerializeField] public BoundaryType Type { get; private set; }
-        [SerializeField] private  Vector3 BoundaryOffset;
-        [SerializeField] private MeshFilter MeshFilter;
-        [SerializeField] private  MeshRenderer Renderer;
-        [SerializeField] private  PolygonCollider2D PolygonCollider;
-        [field: SerializeField] public MeshCollider MeshCollider { get; private set; }
-        [field: SerializeField] public  MeshCollider MeshEdgeCollider { get; private set; }
-        
+        public MeshCollider MeshPolygonCollider { get; private set; }
+        public MeshCollider MeshEdgeCollider { get; private set; }
+
+        [SerializeField] private MeshFilter meshFilter;
+        [SerializeField] private MeshRenderer meshRenderer;
+        [SerializeField] private PolygonCollider2D polygonCollider;
+        [SerializeField] private EdgeCollider2D edgeCollider;
         private bool is2DMode;
 
-        
-        public void Setup(Polygon polygon, bool Is2DMode, Transform parent = null, 
+
+        public void Setup(Polygon polygon, bool Is2DMode, Transform parent = null,
             string boundaryName = null, Vector3 position = default, Quaternion rotation = default)
         {
             MapBoundary boundary = this;
@@ -37,20 +43,20 @@ namespace Carteav
             {
                 boundaryTransform.localPosition = position;
             }
+
             boundaryTransform.rotation = rotation;
             var points3dList = polygon.Points.ConvertAll(vec3 => vec3);
             var points2d = points3dList.ConvertAll(vec3 => new Vector2(vec3.x, vec3.z)).ToArray();
             var points3d = points3dList.ToArray();
             boundary.name = boundaryName ?? boundary.Type.ToString();
-            boundary.MeshFilter.mesh = CreatePolygonMesh(points3d, points2d);
+            boundary.meshFilter.mesh = CreatePolygonMesh(points3d, points2d);
             boundary.is2DMode = Is2DMode;
-            
+
             if (Is2DMode)
             {
-                boundary.PolygonCollider.points = points2d;
+                boundary.polygonCollider.points = points2d;
                 if (boundary.Type == MapBoundary.BoundaryType.MainArea)
                 {
-                    EdgeCollider2D edgeCollider = boundary.GetComponent<EdgeCollider2D>();
                     edgeCollider.points = points2d;
                 }
             }
@@ -59,33 +65,33 @@ namespace Carteav
                 bool extudePolygonToHaveHeight = true;
                 if (extudePolygonToHaveHeight)
                 {
+                    MeshCollider[] meshColliders = GetComponents<MeshCollider>();
+                    boundary.MeshPolygonCollider = meshColliders[0];
+                    boundary.MeshPolygonCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d);
                     if (Type == BoundaryType.MainArea)
                     {
-                        MeshCollider[] meshColliders = GetComponents<MeshCollider>();
-                        boundary.MeshCollider = meshColliders[0];
                         boundary.MeshEdgeCollider = meshColliders[1];
-                        boundary.MeshEdgeCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extudePolygonToHaveHeight, true);
+                        boundary.MeshEdgeCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, true);
                     }
-
-                    boundary.MeshCollider.sharedMesh = CreatePolygonMesh3D(points3d, points2d, extudePolygonToHaveHeight);
                 }
                 else
                 {
-                    boundary.MeshCollider.sharedMesh = boundary.MeshFilter.mesh;
+                    boundary.MeshPolygonCollider.sharedMesh = boundary.meshFilter.mesh;
                 }
             }
         }
 
-        
+
         public void Dispose()
         {
-            Destroy(MeshFilter.mesh);
+            Destroy(meshFilter.mesh);
             if (!is2DMode)
             {
-                if (MeshCollider != null && MeshCollider.sharedMesh != null)
+                if (MeshPolygonCollider != null && MeshPolygonCollider.sharedMesh != null)
                 {
-                    Destroy(MeshCollider.sharedMesh);
+                    Destroy(MeshPolygonCollider.sharedMesh);
                 }
+
                 if (MeshEdgeCollider != null && MeshEdgeCollider.sharedMesh != null)
                 {
                     Destroy(MeshEdgeCollider.sharedMesh);
@@ -93,10 +99,10 @@ namespace Carteav
             }
         }
 
-        
+
         public void SetVisible(bool visibile)
         {
-            Renderer.enabled = visibile;
+            meshRenderer.enabled = visibile;
         }
 
 
@@ -111,7 +117,7 @@ namespace Carteav
             return mesh;
         }
 
-        
+
         /// <summary>
         /// Creates a 3 dimensional mesh from a given points array representing a polygon.
         /// The mesh can be either flat representing the simple polygon in 3D space, or it can be
@@ -123,64 +129,63 @@ namespace Carteav
         /// /// <param name="extudePolygon">If true the 3D mesh created will be a two duplicates of the same
         /// polygon with a  height difference. If false only a single layer flat polyon 3D mesh will be created.</param>
         /// <returns></returns>
-        private Mesh CreatePolygonMesh3D(Vector3[] points3d, Vector2[] points2d, bool extrudePolygon = true,
-            bool meshEdge = false)
+        private Mesh CreatePolygonMesh3D(Vector3[] points3d, Vector2[] points2d, bool meshEdge = false, float height = 2f)
         {
             Mesh mesh = new Mesh();
             Triangulator triangulator = new Triangulator(points2d);
             var polygonTriangles = triangulator.Triangulate().Reverse().ToArray();
 
 
-            Vector3 height = Vector3.zero;
-            height.y = 1;
+            Vector3 heightOffset = Vector3.zero;
+            heightOffset.y = height;
 
             var verts = new List<Vector3>(points3d);
             List<int> triangles = new List<int>(polygonTriangles);
             int vertexAmount = points3d.Length;
 
-            if (extrudePolygon)
+
+            // duplicate the polygon vertices on a different height
+            for (int i = 0; i < points3d.Length; i++)
             {
-                // duplicate the polygon vertices on a different height
-                for (int i = 0; i < points3d.Length; i++)
-                {
-                    var vertex = points3d[i];
-                    verts.Add(vertex - height);
-                }
+                var vertex = points3d[i];
+                verts.Add(vertex - heightOffset / 2);
+                //points3d[i] = vertex + height / 2;
+            }
 
 
-                // duplicate the original polygon's triangles only this time for the duplicated polygon's vertices
-                for (int i = 0; i < mesh.triangles.Length; i++)
-                {
-                    triangles.Add(polygonTriangles[i] + vertexAmount);
-                }
+            // duplicate the original polygon's triangles only this time for the duplicated polygon's vertices
+            for (int i = 0; i < mesh.triangles.Length; i++)
+            {
+                triangles.Add(polygonTriangles[i] + vertexAmount);
+            }
 
-                List<(int, int)> boundaryEdges = new List<(int, int)>();
-                // prepare edges connecting upper and lower polygon
-                for (int i = 0; i < polygonTriangles.Length / 3; i++)
-                {
-                    boundaryEdges.Add((polygonTriangles[i * 3], polygonTriangles[i * 3 + 1]));
-                    boundaryEdges.Add((polygonTriangles[i * 3 + 1], polygonTriangles[i * 3 + 2]));
-                    boundaryEdges.Add((polygonTriangles[i * 3 + 2], polygonTriangles[i * 3]));
-                }
+            List<(int, int)> boundaryEdges = new List<(int, int)>();
+            // prepare edges connecting upper and lower polygon
+            for (int i = 0; i < polygonTriangles.Length / 3; i++)
+            {
+                boundaryEdges.Add((polygonTriangles[i * 3], polygonTriangles[i * 3 + 1]));
+                boundaryEdges.Add((polygonTriangles[i * 3 + 1], polygonTriangles[i * 3 + 2]));
+                boundaryEdges.Add((polygonTriangles[i * 3 + 2], polygonTriangles[i * 3]));
+            }
 
-                // remove non-bounding edges - for those that have the opposite edge present, remove both
-                for (int i = 0; i < boundaryEdges.Count; i++)
+            // remove non-bounding edges - for those that have the opposite edge present, remove both
+            for (int i = 0; i < boundaryEdges.Count; i++)
+            {
+                (int edgeA, int edgeB) = boundaryEdges[i];
+                if (boundaryEdges.Contains((edgeB, edgeA)) && meshEdge)
                 {
-                    (int edgeA, int edgeB) = boundaryEdges[i];
-                    if (boundaryEdges.Contains((edgeB, edgeA)) && meshEdge)
-                    {
-                        boundaryEdges.Remove(boundaryEdges[i]);
-                        boundaryEdges.Remove((edgeB, edgeA));
-                    }
-                }
-
-                // add triangles out of the bounding edges connecting upper and lower polygon
-                for (int i = 0; i < boundaryEdges.Count; i++)
-                {
-                    (int edgeA, int edgeB) = boundaryEdges[i];
-                    AddHeightTriangle(triangles, edgeA, edgeB, vertexAmount);
+                    boundaryEdges.Remove(boundaryEdges[i]);
+                    boundaryEdges.Remove((edgeB, edgeA));
                 }
             }
+
+            // add triangles out of the bounding edges connecting upper and lower polygon
+            for (int i = 0; i < boundaryEdges.Count; i++)
+            {
+                (int edgeA, int edgeB) = boundaryEdges[i];
+                AddHeightTriangle(triangles, edgeA, edgeB, vertexAmount);
+            }
+
 
             mesh.vertices = verts.ToArray();
             mesh.triangles = triangles.ToArray();

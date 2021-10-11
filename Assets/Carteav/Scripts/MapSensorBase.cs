@@ -9,9 +9,15 @@ using Vector3 = UnityEngine.Vector3;
 
 namespace Carteav
 {
+    /// <summary>
+    /// Map Sensor is responsible for receiving paths and boundaries and reporting on collisions and boundary crossings.
+    /// Uses ROS2.
+    /// </summary>
     [SensorType("Control", new[] { typeof(CartPath) })]
     public class MapSensorBase : SensorBase
     {
+        // Ros2 message types have Message suffix, i.e.: SiteBoundriesMessage
+        // Both message types(structs) and runtime types(classes) are located in CarteavMessages.cs
         protected Subscriber<CartPath> PathSubscribe;
         protected Subscriber<SiteBoundaries> BoundariesSubscribe;
         protected Publisher<BoundaryCross> BoundaryCrossPublish;
@@ -29,6 +35,9 @@ namespace Carteav
 
         private CartPath path;
         private int currentPointIndex;
+        /// <summary>
+        /// The cart's 3D object transform
+        /// </summary>
         private Transform cartTransform;
         private float MaxSteering = 0.5f;
         private float MaxAcceleration = 20f;
@@ -56,15 +65,19 @@ namespace Carteav
 
         protected override void Initialize()
         {
-            var parent = transform.parent;
-            
-            CartInput = parent.GetComponentInChildren<SimcartInput>();
-            vehicleController = parent.GetComponentInChildren<VehicleController>();
-            cartTransform = parent.GetChild(0);
+            // The sensor's parent is supposed to be the agent object, i.e. the Cart's root object
+            var cart = transform.parent;
+            // The first child of the cart is supposed to contain the actual 3D cart object
+            cartTransform = cart.GetChild(0);
             cartRigidBody = cartTransform.GetComponentInChildren<Rigidbody>();
+            
+            CartInput = cart.GetComponentInChildren<SimcartInput>();
+            vehicleController = cart.GetComponentInChildren<VehicleController>();
+            vehicleController.OnCollisionEvent += OnAgentCollision;
+            
+            
             dataHandler = FindObjectOfType<DataHandler>();
             dataHandler.Setup(BoundaryCrossPublish, cartTransform, Is2DMode);
-            vehicleController.OnCollisionEvent += OnAgentCollision;
             previousIs2DMode = Is2DMode;
 
             // for 3D mode
