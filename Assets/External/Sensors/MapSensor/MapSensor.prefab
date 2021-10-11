@@ -1,0 +1,147 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &8764554502560716484
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 6809882359904912306}
+  - component: {fileID: -4367434242380197558}
+  m_Layer: 17
+  m_Name: MapSensor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &6809882359904912306
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8764554502560716484}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_Children:
+  - {fileID: 1907679651469274130}
+  m_Father: {fileID: 0}
+  m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-4367434242380197558
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8764554502560716484}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0bf44cc85bedca459b4d4a58a0b24e4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  Name: Carteav Control Sensor
+  Topic: 
+  Frame: frame
+  ParentTransform: {fileID: 0}
+  Is2DMode: 1
+  PathTopic: /cart_path
+  BoundriesTopic: /site_boundries
+  CollisionTopic: /collision
+  agent3DCollider: {fileID: 8960557641647193368}
+--- !u!1001 &6104419189916374663
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    m_TransformParent: {fileID: 6809882359904912306}
+    m_Modifications:
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_RootOrder
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7444203046824541947, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_Name
+      value: Agent3DCollider
+      objectReference: {fileID: 0}
+    - target: {fileID: 7444203046824541947, guid: 1c68c6f2badbef369980e4196fa03e82,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 1c68c6f2badbef369980e4196fa03e82, type: 3}
+--- !u!4 &1907679651469274130 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 5678529370044119701, guid: 1c68c6f2badbef369980e4196fa03e82,
+    type: 3}
+  m_PrefabInstance: {fileID: 6104419189916374663}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &8960557641647193368 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 2949025812923411359, guid: 1c68c6f2badbef369980e4196fa03e82,
+    type: 3}
+  m_PrefabInstance: {fileID: 6104419189916374663}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fbba4d7fc9eba12d3b48c3c94dd3d45e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

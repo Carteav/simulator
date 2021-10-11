@@ -29,18 +29,12 @@
 .LSOverride
 
 # Project specific
-/AssetBundles/
-/Assets/External/Environments/
-/Assets/External/Vehicles/
-/Assets/External/Sensors/
-/Assets/External/Controllables/
-/Assets/External/NPCs/
-/Assets/External/Pedestrians/
+/AssetBundles/Vehicles/
+/AssetBundles/Sensors/
 /Assets/External/Restricted/
 /Assets/External/Restricted.meta
 /Assets/External/Tests/
 /Assets/External/Tests.meta
-/Assets/External/Bridges/
 /Assets/Resources/BuildInfo.asset*
 /Assets/Resources/Database/default*
 /WebUI/node_modules/
@@ -58,3 +52,6 @@
 /heu_settings.ini
 **/HoudiniEngineUnity/
 **/HoudiniEngineUnity.meta
+
+# Rider
+/.idea/
