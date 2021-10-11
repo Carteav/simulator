@@ -1,3 +1,13 @@
+## Version Upgrade Steps:
+1) Add OnCollision event to Assets/Scripts/Controllers/VehicleController.
+2) Copy Carteav folder to Assets folder.
+3) Add references to CarteavAssembly in External/Sensors/Simulator.Sensors.asmdef and other relevant 
+   Folders in the External folder.
+4) Copy sneosrs and such to apropriate External folder.
+5) Add Assets/Carteav/Prefabs/Carteav prefab to the LoaderScene(for Map Sensor support).
+6) Fix radar related bug in Assets/Scripts/Bridge/BridgePlugin.cs: on line 97
+   in the function AddPublisherCreator change Subscribers to Publishers.
+
 <h1 align="center">SVL Simulator:  An Autonomous Vehicle Simulator</h1>
 
 <div align="center">
