@@ -71,7 +71,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d955ba3ba64d964abaec2c6e4d211a92, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shouldExtrude3DPolygon: 1
   agentCollider2D: {fileID: 2607533779459166769}
   boundaryPrefab: {fileID: 5989638678500060295, guid: 0743939d6bb7f717cb7c7eaacb00dd23,
     type: 3}
@@ -94,7 +93,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2607533780545676269}
   m_Layer: 0
-  m_Name: BoundaryOrientation
+  m_Name: DefaultBoundaryOrientation
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
