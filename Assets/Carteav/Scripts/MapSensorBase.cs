@@ -28,6 +28,7 @@ namespace Carteav
         [SerializeField] private bool Is2DMode = true;
         [SerializeField] private string PathTopic;
         [SerializeField] private string BoundriesTopic;
+        [SerializeField] private string BoundriesCrossTopic;
         [SerializeField] private string CollisionTopic;
         [SerializeField] private Agent3DCollider agent3DCollider;
 
@@ -109,7 +110,7 @@ namespace Carteav
 
             Bridge.AddSubscriber(PathTopic, PathSubscribe);
             Bridge.AddSubscriber(BoundriesTopic, BoundariesSubscribe);
-            BoundaryCrossPublish = Bridge.AddPublisher<BoundaryCross>(BoundriesTopic);
+            BoundaryCrossPublish = Bridge.AddPublisher<BoundaryCross>(BoundriesCrossTopic);
             CollisionPublish = Bridge.AddPublisher<CollisionData>(CollisionTopic);
         }
 

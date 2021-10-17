@@ -51,6 +51,7 @@ MonoBehaviour:
   Is2DMode: 1
   PathTopic: /cart_path
   BoundriesTopic: /site_boundries
+  BoundriesCrossTopic: /boundary_cross
   CollisionTopic: /collision
   agent3DCollider: {fileID: 8960557641647193368}
 --- !u!1001 &6104419189916374663
