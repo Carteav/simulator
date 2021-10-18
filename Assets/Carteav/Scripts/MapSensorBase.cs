@@ -53,8 +53,7 @@ namespace Carteav
 
         public void Update()
         {
-            var pos = cartTransform.position;
-            dataHandler.Update2DPosition(new Vector2(pos.x, pos.z));
+            
             if (previousIs2DMode != Is2DMode)
             {
                 previousIs2DMode = Is2DMode;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Carteav;
 using Carteav.Messages;
@@ -16,25 +17,37 @@ namespace Carteav
         private bool insideParmittedArea;
 
 
-        public void Setup(Transform agentTransform)
+        public void Update()
         {
-            this.agentTransform = agentTransform;
+            if (agentTransform != null)
+            {
+                var pos = agentTransform.position;
+                transform.localPosition = new Vector2(-pos.x, -pos.z);
+                var newRotation = transform.localRotation.eulerAngles;
+                newRotation.z = agentTransform.eulerAngles.y;
+                transform.localRotation = Quaternion.Euler(newRotation);
+            }
+        }
+
+        public void Setup(Transform agentObjectTransform)
+        {
+            this.agentTransform = agentObjectTransform;
             AssignColliderPoints();
         }
 
 
         private void AssignColliderPoints()
         {
-            var meshCollider = agentTransform.GetComponentInChildren<Collider>();
-            var agentBounds = meshCollider.bounds;
+            var mesh = agentTransform.GetComponentInChildren<MeshFilter>().mesh;
+            var agentBounds = mesh.bounds;
             Vector2[] points = new List<Vector2>()
             {
-                new Vector2() { x = agentBounds.max.x, y = agentBounds.max.y },
-                new Vector2() { x = agentBounds.max.x, y = agentBounds.min.y },
-                new Vector2() { x = agentBounds.min.x, y = agentBounds.min.y },
-                new Vector2() { x = agentBounds.min.x, y = agentBounds.max.y },
+                new Vector2() { x = agentBounds.max.x, y = agentBounds.max.z },
+                new Vector2() { x = agentBounds.max.x, y = agentBounds.min.z },
+                new Vector2() { x = agentBounds.min.x, y = agentBounds.min.z },
+                new Vector2() { x = agentBounds.min.x, y = agentBounds.max.z },
             }.ToArray();
-            //agentCollider.AgentCollider2D.points = points;
+            AgentCollider2D.points = points;
         }
 
         

@@ -102,12 +102,7 @@ namespace Carteav
         {
             publishBoundaryCross(boundaryCross);
         }
-
-
-        public void Update2DPosition(Vector2 position)
-        {
-            agentCollider2D.transform.localPosition = -position;
-        }
+        
 
 
         public void ToggleData(bool isShown)
