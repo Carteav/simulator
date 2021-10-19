@@ -206,7 +206,7 @@ public class VehicleController : AgentController
         {
             ApiManager.Instance?.AddCollision(gameObject, collision.gameObject, collision);
             SimulatorManager.Instance.AnalysisManager.IncrementEgoCollision(Controller.GTID, transform.position, Dynamics.Velocity, otherVel, otherLayer);
-            OnCollisionEvent?.Invoke(gameObject, collision.gameObject, collision);
+            OnCollisionEvent?.Invoke(gameObject, collision?.gameObject, collision);
         }
     }
 

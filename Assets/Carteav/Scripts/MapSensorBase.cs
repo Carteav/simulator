@@ -172,7 +172,7 @@ namespace Carteav
             };
             Debug.Log($"OnCollision: {Converters.ConvertCollision(collisionData).ToString()}");
             collisions.Add(collisionData);
-            CollisionPublish(collisionData);
+            CollisionPublish?.Invoke(collisionData);
         }
 
 

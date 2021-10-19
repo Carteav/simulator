@@ -2660,7 +2660,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7183790811244294239}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: 0}
+  m_LocalPosition: {x: 0, y: 0.329, z: -1.343}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 1509710587244449263}
@@ -2750,7 +2750,7 @@ GameObject:
   - component: {fileID: 2539987880774657816}
   - component: {fileID: 1072515022849310901}
   m_Layer: 9
-  m_Name: Jaguar
+  m_Name: Jaguar2015XE
   m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3197,12 +3197,6 @@ GameObject:
     type: 3}
   m_PrefabInstance: {fileID: 3134276377899774895}
   m_PrefabAsset: {fileID: 0}
---- !u!1 &7513495292823741547 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 4844294211950417860, guid: df594e44cc16d614eaadf8e73b37d41a,
-    type: 3}
-  m_PrefabInstance: {fileID: 3134276377899774895}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2737904623825645705 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -8178024011320802522, guid: df594e44cc16d614eaadf8e73b37d41a,
@@ -3212,6 +3206,12 @@ GameObject:
 --- !u!4 &7927913199008258229 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -4216859302048453862, guid: df594e44cc16d614eaadf8e73b37d41a,
+    type: 3}
+  m_PrefabInstance: {fileID: 3134276377899774895}
+  m_PrefabAsset: {fileID: 0}
+--- !u!1 &7513495292823741547 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 4844294211950417860, guid: df594e44cc16d614eaadf8e73b37d41a,
     type: 3}
   m_PrefabInstance: {fileID: 3134276377899774895}
   m_PrefabAsset: {fileID: 0}
