@@ -133,13 +133,11 @@ namespace Carteav
         public void HandlePath(CartPath path, Vector3 offset)
         {
             PathRenderer.positionCount = path.Points.Count;
-            int index = 0;
-            foreach (var waypointNode in path.Points)
+            for (int i = 0; i < path.Points.Count; i++)
             {
-                 Vector3 point = waypointNode.Point + offset;
+                 Vector3 point = path.Points[i].Point + offset;
                  point.y = offset.y + LineRendererPositionOffset.y;
-                 PathRenderer.SetPosition(index, point);
-                 index++;
+                 PathRenderer.SetPosition(i, point);
             }
         }
         
