@@ -132,30 +132,12 @@ namespace Carteav
 
         public void HandlePath(CartPath path, Vector3 offset)
         {
-            PathRenderer.positionCount = path.Points.Count + 2;
-            //Debug.Log($"Setting {path.Points.Count} points");
-            int index = 0;
-            Vector3 raycastPositionOffset = new Vector3(0, 1000, 0);
-            Vector3 raycastDirection = new Vector3(0, -1, 0);
-            RaycastHit hit;
-            foreach (var waypointNode in path.Points)
+            PathRenderer.positionCount = path.Points.Count;
+            for (int i = 0; i < path.Points.Count; i++)
             {
-                Vector3 point = waypointNode.Point + offset;
-                point.y = 0;
-                if (Physics.Raycast(point + raycastPositionOffset, raycastDirection, out hit, float.MaxValue,
-                    LayerMask.GetMask("Default")))
-                {
-                }
-                else
-                {
-                    Physics.Raycast(point - raycastPositionOffset, -raycastDirection, out hit, float.MaxValue,
-                        LayerMask.GetMask("Default"));
-                }
-
-                point.y = hit.point.y + LineRendererPositionOffset.y;
-                //Debug.Log($"Setting point:{point}, original:{waypointNode.Point}, hit:{hit.point}, index:{index + 1}");
-                PathRenderer.SetPosition(index + 1, point);
-                index++;
+                 Vector3 point = path.Points[i].Point + offset;
+                 point.y = offset.y + LineRendererPositionOffset.y;
+                 PathRenderer.SetPosition(i, point);
             }
         }
         
