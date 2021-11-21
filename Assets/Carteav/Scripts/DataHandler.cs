@@ -75,7 +75,7 @@ namespace Carteav
         private Publisher<BoundaryCross> publishBoundaryCross;
         private Transform agentTransform;
         private LineRenderer pathRenderer;
-        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.25f, 0.0f);
+        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.4f, 0.0f);
         private SiteBoundaries currentBoundaries;
 
         
