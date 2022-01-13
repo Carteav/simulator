@@ -9,6 +9,7 @@ namespace Simulator.Sensors
 {
     using UnityEngine;
     using Utilities;
+    using Simulator.Bridge;
 
     public abstract class FrequencySensorBase : SensorBase
     {
@@ -34,6 +35,7 @@ namespace Simulator.Sensors
         protected virtual void SensorUpdate()
         {
         }
+        
 
         protected virtual void Update()
         {
@@ -69,6 +71,12 @@ namespace Simulator.Sensors
                 nextCaptureTime = currentTime + 1.0f / Frequency;
             else
                 nextCaptureTime += 1.0f / Frequency;
+        }
+
+
+        public override void OnBridgeSetup(BridgeInstance bridge)
+        {
+            Debug.Log("[OnBridgeSetup] FrequencySensorBase");
         }
     }
 }
