@@ -75,7 +75,7 @@ namespace Carteav
         private Publisher<BoundaryCross> publishBoundaryCross;
         private Transform agentTransform;
         private LineRenderer pathRenderer;
-        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.1f, 0.0f);
+        private Vector3 LineRendererPositionOffset = new Vector3(0.0f, 0.4f, 0.0f);
         private SiteBoundaries currentBoundaries;
 
         
@@ -135,7 +135,8 @@ namespace Carteav
             PathRenderer.positionCount = path.Points.Count;
             for (int i = 0; i < path.Points.Count; i++)
             {
-                 Vector3 point = path.Points[i].Point + offset;
+                 Vector3 point = -path.Points[i].Point;
+                 point += offset;
                  point.y = offset.y + LineRendererPositionOffset.y;
                  PathRenderer.SetPosition(i, point);
             }
@@ -150,28 +151,31 @@ namespace Carteav
             GameObject permittedAreaPrefab = Is2DMode ? boundaryPrefab.gameObject : boundary3DPrefab.gameObject;
             GameObject restrictedAreaPrefab =
                 Is2DMode ? boundaryHolePrefab.gameObject : boundaryHole3DPrefab.gameObject;
-            var mainAreaPolygon = boundaries.MultiPolygons[0].Polygons[0];
-
-            MapBoundary mainArea = pools.GetInstance(permittedAreaPrefab).GetComponent<MapBoundary>();
-            mainArea.Setup(mainAreaPolygon, Is2DMode, transform, 
-                mainArea.Type.ToString(), boundaryOrientation.position, boundaryOrientation.rotation);
-            boundariesInUse.Add(mainArea);
-
-            if (Is2DMode)
+            for (int j = 0; j < boundaries.MultiPolygons.Count; j++)
             {
-                agentCollider2D.transform.parent = mainArea.transform;
-            }
+                var mainAreaPolygon = boundaries.MultiPolygons[j].Polygons[0];
 
-            List<Polygon> holes = boundaries.MultiPolygons[0].Polygons
-                .GetRange(1, boundaries.MultiPolygons[0].Polygons.Count - 1);
-            Vector3 restrictedOffset = new Vector3(0, 0.01f, 0);
-            for (int i = 0; i < holes.Count; i++)
-            {
-                var hole = holes[i];
-                var restrictedArea = pools.GetInstance(restrictedAreaPrefab).GetComponent<MapBoundary>();
-                restrictedArea.Setup(hole, Is2DMode, mainArea.transform, 
-                    $"{restrictedArea.Type} - {i}", restrictedOffset);
-                boundariesInUse.Add(restrictedArea);
+                MapBoundary mainArea = pools.GetInstance(permittedAreaPrefab).GetComponent<MapBoundary>();
+                mainArea.Setup(mainAreaPolygon, Is2DMode, transform,
+                    mainArea.Type.ToString(), boundaryOrientation.position, boundaryOrientation.rotation);
+                boundariesInUse.Add(mainArea);
+
+                if (Is2DMode)
+                {
+                    agentCollider2D.transform.parent = mainArea.transform;
+                }
+
+                List<Polygon> holes = boundaries.MultiPolygons[j].Polygons
+                    .GetRange(1, boundaries.MultiPolygons[j].Polygons.Count - 1);
+                Vector3 restrictedOffset = new Vector3(0, 0.01f, 0);
+                for (int i = 0; i < holes.Count; i++)
+                {
+                    var hole = holes[i];
+                    var restrictedArea = pools.GetInstance(restrictedAreaPrefab).GetComponent<MapBoundary>();
+                    restrictedArea.Setup(hole, Is2DMode, mainArea.transform,
+                        $"{restrictedArea.Type} - {i}", restrictedOffset);
+                    boundariesInUse.Add(restrictedArea);
+                }
             }
         }
     }

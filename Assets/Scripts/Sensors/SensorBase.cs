@@ -67,8 +67,8 @@ namespace Simulator.Sensors
         protected abstract void Initialize();
 
         protected abstract void Deinitialize();
-
-        public abstract void OnBridgeSetup(BridgeInstance bridge);
+        // public abstract void OnBridgeSetup(BridgeInstance bridge);
+        public virtual void OnBridgeSetup(BridgeInstance bridge){Debug.Log("[OnBridgeSetup] SensorBase");}
         public abstract void OnVisualize(Visualizer visualizer);
         public abstract void OnVisualizeToggle(bool state);
         public virtual void OnAnalyze() { }

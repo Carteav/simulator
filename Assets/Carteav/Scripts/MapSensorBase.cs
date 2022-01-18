@@ -146,7 +146,7 @@ namespace Carteav
             //FollowPath(path);
             if (dataHandler != null)
             {
-                Vector3 offset = cartTransform.position - path.Points[0].Point;
+                Vector3 offset = Vector3.zero;//cartTransform.position - path.Points[0].Point;
                 offset.y = cartTransform.position.y;
                 dataHandler.HandlePath(path, offset);
             }

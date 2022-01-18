@@ -240,9 +240,9 @@ public class SensorsController : MonoBehaviour, ISensorsController, IMessageSend
                 sensor.name = name;
                 if (AgentBridgeClient != null)
                 {
-                    sensor.GetComponent<SensorBase>().OnBridgeSetup(AgentBridgeClient.Bridge);
+                     sensor.GetComponent<SensorBase>().OnBridgeSetup(AgentBridgeClient.Bridge);       
                 }
-
+           
                 parents.Add(name, sensor);
                 requested.RemoveAt(i);
                 i--;
